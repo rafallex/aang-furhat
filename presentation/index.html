@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aang on Furhat — Technical Deep-Dive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,500&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ---- from the design's <helmet> (verbatim) ---- */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @keyframes breathe { 0%,100% { opacity: .55; transform: scale(1); } 50% { opacity: 1; transform: scale(1.04); } }
+  @keyframes arrowGlow { 0%,100% { filter: drop-shadow(0 0 14px rgba(155,232,255,.55)) drop-shadow(0 0 40px rgba(155,232,255,.35)); } 50% { filter: drop-shadow(0 0 26px rgba(255,255,255,.9)) drop-shadow(0 0 70px rgba(155,232,255,.6)); } }
+  @keyframes windSweep { 0% { transform: translateX(-30%); opacity: 0; } 30% { opacity: .5; } 100% { transform: translateX(130%); opacity: 0; } }
+  @keyframes floatY { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+  /* ---- stage runtime (replaces the proprietary deck-stage.js) ---- */
+  html, body { height: 100%; }
+  body { background: #161310; overflow: hidden; font-family: 'Archivo', sans-serif; }
+  #deck { position: fixed; inset: 0; overflow: hidden; }
+  #stage { position: absolute; top: 50%; left: 50%; width: 1920px; height: 1080px;
+           transform: translate(-50%,-50%) scale(1); transform-origin: center center; }
+  .slide { position: absolute; inset: 0; width: 1920px; height: 1080px;
+           opacity: 0; visibility: hidden; transition: opacity .45s ease; }
+  .slide.active { opacity: 1; visibility: visible; }
+  .slide > section { width: 1920px; height: 1080px; }
+
+  /* heads-up display (slide counter + label + hints), fades when idle */
+  #hud { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+         display: flex; align-items: center; gap: 16px; padding: 10px 20px; border-radius: 999px;
+         background: rgba(8,11,17,.62); color: #E9DEC8; font-family: 'IBM Plex Mono', monospace;
+         font-size: 15px; letter-spacing: .4px; backdrop-filter: blur(6px);
+         transition: opacity .4s ease; z-index: 50; }
+  #hud.idle { opacity: 0; }
+  #hud .count { color: #F0A65A; }
+  #hud .sep { color: #4A4137; }
+  #hud .label { color: #9BE8FF; max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #hud .hint { color: #7C6F5C; }
+
+  /* speaker-notes drawer (toggle with N) */
+  #notes { position: fixed; left: 0; right: 0; bottom: 0; max-height: 40vh; overflow: auto;
+           padding: 22px 32px 28px; background: rgba(8,11,17,.94); color: #DCEFF7;
+           border-top: 1px solid rgba(155,232,255,.25); font-size: 19px; line-height: 1.55;
+           transform: translateY(100%); transition: transform .35s ease; z-index: 60; }
+  #notes.show { transform: translateY(0); }
+  #notes .nlabel { font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 2px;
+                   text-transform: uppercase; color: #F0A65A; margin-bottom: 8px; }
+
+  /* print → one slide per page (Chrome: Save as PDF, enable Background graphics) */
+  @media print {
+    @page { size: 1920px 1080px; margin: 0; }
+    html, body { background: #fff; overflow: visible; height: auto; }
+    #deck { position: static; overflow: visible; }
+    #stage { position: static; width: 1920px; height: auto; transform: none !important; }
+    .slide { position: relative; inset: auto; opacity: 1 !important; visibility: visible !important;
+             page-break-after: always; break-after: page; }
+    #hud, #notes { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="deck"><div id="stage">
+<div class="slide">
+<section data-label="Title" data-speaker-notes="Aang from Avatar: The Last Airbender, built as a real talking character on a Furhat social robot — driven entirely over the Furhat Realtime API. Today: how the conversation loop works, how the LLM flips its own persona, and the choreographed Avatar State it surges into." style="padding: 96px 110px 84px; display: flex; flex-direction: column; justify-content: center; font-family: 'Archivo', sans-serif; color: #2A2018; overflow: hidden; background: radial-gradient(circle at 84% 18%, rgba(217,123,43,.14), transparent 46%), radial-gradient(circle at 12% 90%, rgba(42,107,192,.10), transparent 50%), #F2E9DA;">
+    <div style="display: flex; align-items: center; gap: 80px;">
+      <div style="flex: 1;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; letter-spacing: 4px; text-transform: uppercase; color: #B5631A; margin-bottom: 28px;">Furhat Realtime API · Python</div>
+        <h1 style="font-family: 'Spectral', serif; font-weight: 600; font-size: 104px; line-height: .98; letter-spacing: -1px;">Aang on Furhat</h1>
+        <p style="font-family: 'Spectral', serif; font-style: italic; font-weight: 500; font-size: 40px; line-height: 1.25; color: #6E5F4C; margin-top: 30px; max-width: 21ch;">A conversational Avatar with an unlockable Avatar State.</p>
+        <div style="display: flex; gap: 14px; margin-top: 52px; flex-wrap: wrap;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #2A6BC0; border: 1px solid rgba(42,107,192,.35); border-radius: 999px; padding: 9px 18px;">speech → LLM → speech</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #B5631A; border: 1px solid rgba(181,99,26,.35); border-radius: 999px; padding: 9px 18px;">self-switching brain</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #6E5F4C; border: 1px solid rgba(110,95,76,.35); border-radius: 999px; padding: 9px 18px;">chorus voice</span>
+        </div>
+      </div>
+      <div style="flex: 0 0 360px; display: flex; align-items: center; justify-content: center;">
+        <svg viewBox="0 0 100 130" width="300" height="390" style="animation: floatY 6s ease-in-out infinite;">
+          <path d="M38 2 H62 V58 H80 L50 122 L20 58 H38 Z" fill="#2A6BC0"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="slide">
+<section data-label="Realtime API" data-speaker-notes="The whole thing rides one WebSocket on port 9000. Every message is JSON tagged with a type — request dot something going out, response dot something coming back. A background reader thread parses everything into a queue; the main thread drives the robot and blocks on wait_for when it needs a specific reply, like end-of-speech." style="padding: 90px 110px 84px; display: flex; flex-direction: column; font-family: 'Archivo', sans-serif; color: #2A2018; overflow: hidden; background: radial-gradient(circle at 88% 12%, rgba(217,123,43,.10), transparent 44%), #F2E9DA;">
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; letter-spacing: 3px; text-transform: uppercase; color: #B5631A; margin-bottom: 16px;">The substrate</div>
+    <h2 style="font-family: 'Spectral', serif; font-weight: 600; font-size: 60px; line-height: 1.04; letter-spacing: -.5px;">One socket, typed messages</h2>
+    <p style="font-size: 30px; line-height: 1.4; color: #6E5F4C; margin-top: 18px; max-width: 40ch;">A single WebSocket at <span style="font-family:'IBM Plex Mono',monospace; color:#2A6BC0;">ws://host:9000/v1/events</span> — no SDK, no install on the robot.</p>
+
+    <div style="display: flex; align-items: stretch; gap: 0; margin-top: 56px;">
+      <div style="flex: 0 0 320px; border: 2px solid rgba(42,32,24,.18); border-radius: 18px; padding: 34px; background: #FBF6EC; display: flex; flex-direction: column; justify-content: center;">
+        <div style="font-family: 'Spectral', serif; font-weight: 600; font-size: 34px;">Your Python</div>
+        <div style="font-size: 24px; color: #6E5F4C; margin-top: 8px; line-height: 1.35;">reader thread → queue · main thread blocks on <span style="font-family:'IBM Plex Mono',monospace; color:#B5631A;">wait_for()</span></div>
+      </div>
+
+      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 26px; padding: 0 40px;">
+        <div style="display: flex; align-items: center; gap: 18px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #B5631A;">request.*</span>
+          <div style="flex: 1; height: 3px; background: linear-gradient(90deg, #D9822B, rgba(217,130,43,.15)); position: relative;"><div style="position:absolute; right:-2px; top:-5px; width:0; height:0; border-left:13px solid #D9822B; border-top:7px solid transparent; border-bottom:7px solid transparent;"></div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 18px;">
+          <div style="flex: 1; height: 3px; background: linear-gradient(90deg, rgba(42,107,192,.15), #2A6BC0); position: relative;"><div style="position:absolute; left:-2px; top:-5px; width:0; height:0; border-right:13px solid #2A6BC0; border-top:7px solid transparent; border-bottom:7px solid transparent;"></div></div>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #2A6BC0;">response.*</span>
+        </div>
+      </div>
+
+      <div style="flex: 0 0 320px; border: 2px solid rgba(42,107,192,.3); border-radius: 18px; padding: 34px; background: #FBF6EC; display: flex; flex-direction: column; justify-content: center;">
+        <div style="font-family: 'Spectral', serif; font-weight: 600; font-size: 34px; color: #2A6BC0;">Furhat robot</div>
+        <div style="font-size: 24px; color: #6E5F4C; margin-top: 8px; line-height: 1.35;">speech recognition · TTS · LEDs · face · head pose</div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 12px; margin-top: 52px; flex-wrap: wrap;">
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #2A2018; background: rgba(42,32,24,.06); border-radius: 8px; padding: 9px 15px;">request.speak.text</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #2A2018; background: rgba(42,32,24,.06); border-radius: 8px; padding: 9px 15px;">request.listen.start</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #2A2018; background: rgba(42,32,24,.06); border-radius: 8px; padding: 9px 15px;">request.face.config</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #2A2018; background: rgba(42,32,24,.06); border-radius: 8px; padding: 9px 15px;">request.led.set</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #2A2018; background: rgba(42,32,24,.06); border-radius: 8px; padding: 9px 15px;">response.hear.end</span>
+    </div>
+  </section>
+</div>
+<div class="slide">
+<section data-label="Conversation loop" data-speaker-notes="The conversation is three stages on a loop. Listen returns recognized text. The brain turns that text into a reply. Speak says it back and blocks until end-of-speech. Then straight back to listen. That's the whole heartbeat." style="padding: 90px 110px 84px; display: flex; flex-direction: column; font-family: 'Archivo', sans-serif; color: #2A2018; overflow: hidden; background: radial-gradient(circle at 50% 120%, rgba(42,107,192,.09), transparent 55%), #F2E9DA;">
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; letter-spacing: 3px; text-transform: uppercase; color: #B5631A; margin-bottom: 16px;">The loop</div>
+    <h2 style="font-family: 'Spectral', serif; font-weight: 600; font-size: 60px; line-height: 1.04; letter-spacing: -.5px;">Listen → Brain → Speak</h2>
+
+    <div style="display: flex; align-items: stretch; gap: 24px; margin-top: 64px;">
+      <div style="flex: 1; border-radius: 20px; border: 1px solid rgba(42,32,24,.14); background: #FBF6EC; padding: 38px 34px; display: flex; flex-direction: column;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #B5631A; letter-spacing: 2px;">01</div>
+        <div style="font-family: 'Spectral', serif; font-weight: 600; font-size: 40px; margin-top: 10px;">Listen</div>
+        <p style="font-size: 26px; line-height: 1.4; color: #6E5F4C; margin-top: 14px;">Recognize one utterance, return the text.</p>
+        <div style="margin-top: auto; padding-top: 26px; display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:24px; color:#D9822B;">→ request.listen.start</span>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:24px; color:#2A6BC0;">← response.hear.end</span>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; font-size: 44px; color: #C9A06B;">→</div>
+
+      <div style="flex: 1; border-radius: 20px; border: 1px solid rgba(42,32,24,.14); background: #FBF6EC; padding: 38px 34px; display: flex; flex-direction: column;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #B5631A; letter-spacing: 2px;">02</div>
+        <div style="font-family: 'Spectral', serif; font-weight: 600; font-size: 40px; margin-top: 10px;">Brain</div>
+        <p style="font-size: 26px; line-height: 1.4; color: #6E5F4C; margin-top: 14px;">LLM, in character, returns a reply <em>and</em> a verdict.</p>
+        <div style="margin-top: auto; padding-top: 26px; display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:24px; color:#6E5F4C;">brain.respond(text)</span>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:24px; color:#2A2018;">→ (want_avatar, reply)</span>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; font-size: 44px; color: #C9A06B;">→</div>
+
+      <div style="flex: 1; border-radius: 20px; border: 1px solid rgba(42,32,24,.14); background: #FBF6EC; padding: 38px 34px; display: flex; flex-direction: column;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #B5631A; letter-spacing: 2px;">03</div>
+        <div style="font-family: 'Spectral', serif; font-weight: 600; font-size: 40px; margin-top: 10px;">Speak</div>
+        <p style="font-size: 26px; line-height: 1.4; color: #6E5F4C; margin-top: 14px;">Say it, block until the mouth stops moving.</p>
+        <div style="margin-top: auto; padding-top: 26px; display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:24px; color:#D9822B;">→ request.speak.text</span>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:24px; color:#2A6BC0;">← response.speak.end</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 16px; margin-top: 40px; font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #B5631A;">
+      <span style="font-size: 28px;">↩</span><span>loops back to Listen until a quit phrase or the socket drops (then it reconnects)</span>
+    </div>
+  </section>
+</div>
+<div class="slide">
+<section data-label="Self-switching brain" data-speaker-notes="This is the trick I'm proudest of. The model is told to begin every reply with a control tag — bracket CALM or bracket AVATAR. respond() reads that tag, strips it out of the spoken text, and returns a boolean plus the clean line. No tag means keep the current state. So the LLM decides, turn by turn, whether the stakes are dire enough to surge — alongside a spoken phrase or a hotkey. And it always burns back down." style="padding: 88px 110px 80px; display: flex; flex-direction: column; font-family: 'Archivo', sans-serif; color: #2A2018; overflow: hidden; background: radial-gradient(circle at 90% 88%, rgba(42,107,192,.10), transparent 48%), #F2E9DA;">
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; letter-spacing: 3px; text-transform: uppercase; color: #B5631A; margin-bottom: 14px;">The brain</div>
+    <h2 style="font-family: 'Spectral', serif; font-weight: 600; font-size: 56px; line-height: 1.04; letter-spacing: -.5px;">The brain switches itself</h2>
+    <p style="font-size: 28px; line-height: 1.4; color: #6E5F4C; margin-top: 14px; max-width: 58ch;">Every reply opens with a control tag. The brain reads it, strips it, and the caller drives the transition.</p>
+
+    <div style="display: flex; gap: 38px; margin-top: 40px; align-items: stretch;">
+      <div style="flex: 1.15; border-radius: 18px; background: #1C1813; padding: 32px 34px; font-family: 'IBM Plex Mono', monospace; display: flex; flex-direction: column; justify-content: center;">
+        <div style="font-size: 24px; color: #8A7B66; letter-spacing: 1px;"># model returns</div>
+        <div style="font-size: 25px; line-height: 1.5; color: #E9DEC8; margin-top: 12px;"><span style="color:#9BE8FF; background: rgba(155,232,255,.12); padding: 2px 8px; border-radius: 6px;">[AVATAR]</span> We are the bridge<br>between worlds. Every voice<br>before me speaks as one.</div>
+        <div style="font-size: 30px; color: #D9822B; margin: 22px 0 18px;">↓</div>
+        <div style="font-size: 24px; color: #8A7B66; letter-spacing: 1px;"># respond() parses + strips</div>
+        <div style="font-size: 24px; line-height: 1.6; margin-top: 12px;"><span style="color:#7FD4EE;">want_avatar</span> <span style="color:#8A7B66;">=</span> <span style="color:#E9DEC8;">True</span><br><span style="color:#7FD4EE;">text</span> <span style="color:#8A7B66;">=</span> <span style="color:#E9DEC8;">"We are the bridge…"</span></div>
+        <div style="font-size: 24px; color: #8A7B66; margin-top: 18px;">no tag → keep current state</div>
+      </div>
+
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 22px;">
+        <div style="border-radius: 16px; border: 1px solid rgba(217,130,43,.35); background: #FBF6EC; padding: 26px 28px;">
+          <div style="font-family: 'Spectral', serif; font-weight: 600; font-size: 28px; color: #B5631A;">Three ways in</div>
+          <ul style="list-style: none; margin-top: 14px; display: flex; flex-direction: column; gap: 11px; font-size: 24px; color: #2A2018;">
+            <li style="display:flex; gap:12px;"><span style="color:#D9822B;">●</span> the LLM surges on its own when stakes turn dire</li>
+            <li style="display:flex; gap:12px;"><span style="color:#D9822B;">●</span> a spoken phrase — <span style="font-family:'IBM Plex Mono',monospace; font-size:24px;">"avatar state"</span></li>
+            <li style="display:flex; gap:12px;"><span style="color:#D9822B;">●</span> a keyboard hotkey</li>
+          </ul>
+        </div>
+        <div style="border-radius: 16px; border: 1px solid rgba(42,107,192,.35); background: #FBF6EC; padding: 26px 28px;">
+          <div style="font-family: 'Spectral', serif; font-weight: 600; font-size: 28px; color: #2A6BC0;">One way out</div>
+          <p style="font-size: 24px; color: #2A2018; margin-top: 12px; line-height: 1.4;">It always burns down — on a timeout, or the instant the model judges the moment <span style="font-family:'IBM Plex Mono',monospace; font-size:24px; color:#2A6BC0;">[CALM]</span>.</p>
+        </div>
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #6E5F4C; padding-left: 4px;">brain: groq · anthropic · canned fallback (no key)</div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="slide">
+<section data-label="Avatar State" data-speaker-notes="And here's the payoff. When that AVATAR verdict comes back, a whole choreography fires: swap to the glowing face, freeze the eyes into an unblinking glare, surge the LED ring from black up to a breathing white, rise the head to the sky, whoosh the wind, and switch to the chorus voice — the line layered with detuned copies of itself and a touch of reverb, so it sounds like a thousand past lives speaking at once." style="padding: 88px 110px 84px; display: flex; flex-direction: column; font-family: 'Archivo', sans-serif; color: #DCEFF7; overflow: hidden; position: relative; background: radial-gradient(ellipse at 50% 34%, rgba(155,232,255,.16), transparent 58%), radial-gradient(circle at 50% 125%, rgba(42,107,192,.3), transparent 55%), #070B11;">
+    <div style="position: absolute; inset: 0; overflow: hidden; pointer-events: none;"><div style="position: absolute; top: 30%; left: 0; width: 40%; height: 2px; background: linear-gradient(90deg, transparent, rgba(155,232,255,.6), transparent); animation: windSweep 5s ease-in-out infinite;"></div><div style="position: absolute; top: 62%; left: 0; width: 50%; height: 2px; background: linear-gradient(90deg, transparent, rgba(155,232,255,.4), transparent); animation: windSweep 6.5s ease-in-out 1.5s infinite;"></div></div>
+
+    <div style="display: flex; align-items: center; gap: 70px; flex: 1;">
+      <div style="flex: 0 0 280px; display: flex; align-items: center; justify-content: center;">
+        <svg viewBox="0 0 100 130" width="230" height="300" style="animation: arrowGlow 3.2s ease-in-out infinite;">
+          <path d="M38 2 H62 V58 H80 L50 122 L20 58 H38 Z" fill="#FFFFFF"/>
+        </svg>
+      </div>
+      <div style="flex: 1;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; letter-spacing: 4px; text-transform: uppercase; color: #9BE8FF; margin-bottom: 18px;">The surge</div>
+        <h2 style="font-family: 'Spectral', serif; font-weight: 600; font-size: 76px; line-height: 1; letter-spacing: -1px; color: #FFFFFF; text-shadow: 0 0 30px rgba(155,232,255,.4);">The Avatar State</h2>
+        <p style="font-family: 'Spectral', serif; font-style: italic; font-size: 32px; color: #9BE8FF; margin-top: 20px; max-width: 30ch; line-height: 1.3;">One choreographed transformation, fired from a single boolean.</p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px 44px; margin-top: 46px; max-width: 760px;">
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="font-family:'IBM Plex Mono',monospace; color:#9BE8FF; font-size: 24px;">01</span><span style="font-size: 25px; color:#DCEFF7;">face swap → glowing variant</span></div>
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="font-family:'IBM Plex Mono',monospace; color:#9BE8FF; font-size: 24px;">02</span><span style="font-size: 25px; color:#DCEFF7;">frozen, unblinking glare</span></div>
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="font-family:'IBM Plex Mono',monospace; color:#9BE8FF; font-size: 24px;">03</span><span style="font-size: 25px; color:#DCEFF7;">LED ring surges to a breathing white</span></div>
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="font-family:'IBM Plex Mono',monospace; color:#9BE8FF; font-size: 24px;">04</span><span style="font-size: 25px; color:#DCEFF7;">slow head-rise, eyes to the sky</span></div>
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="font-family:'IBM Plex Mono',monospace; color:#9BE8FF; font-size: 24px;">05</span><span style="font-size: 25px; color:#DCEFF7;">a rushing wind whoosh</span></div>
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="font-family:'IBM Plex Mono',monospace; color:#9BE8FF; font-size: 24px;">06</span><span style="font-size: 25px; color:#FFFFFF;">the chorus voice — many lives, one breath</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="slide">
+<section data-label="Chorus voice" data-speaker-notes="The Avatar lines don't come from the robot's own text-to-speech. A neural voice renders the line off-board, then it's layered with detuned copies of itself plus a little reverb — so one line sounds like a thousand voices speaking as one. That audio is served over HTTP and played back with lip-sync. No edge-tts? It quietly falls back to plain TTS." style="padding: 88px 110px 84px; display: flex; flex-direction: column; font-family: 'Archivo', sans-serif; color: #DCEFF7; overflow: hidden; position: relative; background: radial-gradient(ellipse at 30% 40%, rgba(155,232,255,.14), transparent 56%), radial-gradient(circle at 50% 125%, rgba(42,107,192,.28), transparent 55%), #070B11;">
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; letter-spacing: 4px; text-transform: uppercase; color: #9BE8FF; margin-bottom: 16px;">The voice</div>
+    <h2 style="font-family: 'Spectral', serif; font-weight: 600; font-size: 60px; line-height: 1.04; letter-spacing: -.5px; color: #FFFFFF; text-shadow: 0 0 28px rgba(155,232,255,.35);">A thousand lives, one breath</h2>
+    <p style="font-family: 'Spectral', serif; font-style: italic; font-size: 32px; color: #9BE8FF; margin-top: 16px; max-width: 46ch; line-height: 1.3;">The chorus isn't a voice setting — it's a rendered, layered audio file, built per line.</p>
+
+    <div style="display: flex; align-items: center; gap: 22px; margin-top: 58px; flex-wrap: nowrap;">
+      <div style="flex: 0 0 auto; border-radius: 16px; border: 1px solid rgba(155,232,255,.3); background: rgba(155,232,255,.06); padding: 26px 28px;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #9BE8FF;">edge-tts</div>
+        <div style="font-size: 25px; color: #DCEFF7; margin-top: 8px;">neural TTS · no key</div>
+      </div>
+      <div style="color: #5E8AA8; font-size: 34px;">→</div>
+      <div style="flex: 0 0 auto; border-radius: 16px; border: 1px solid rgba(155,232,255,.3); background: rgba(155,232,255,.06); padding: 26px 28px;">
+        <div style="display: flex; align-items: flex-end; gap: 5px; height: 40px;">
+          <span style="width: 6px; height: 60%; background: #9BE8FF; border-radius: 3px; opacity:.5;"></span>
+          <span style="width: 6px; height: 100%; background: #9BE8FF; border-radius: 3px; opacity:.75;"></span>
+          <span style="width: 6px; height: 78%; background: #FFFFFF; border-radius: 3px;"></span>
+          <span style="width: 6px; height: 100%; background: #9BE8FF; border-radius: 3px; opacity:.75;"></span>
+          <span style="width: 6px; height: 55%; background: #9BE8FF; border-radius: 3px; opacity:.5;"></span>
+        </div>
+        <div style="font-size: 25px; color: #DCEFF7; margin-top: 12px;">layer detuned copies</div>
+      </div>
+      <div style="color: #5E8AA8; font-size: 34px;">→</div>
+      <div style="flex: 0 0 auto; border-radius: 16px; border: 1px solid rgba(155,232,255,.3); background: rgba(155,232,255,.06); padding: 26px 28px;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #9BE8FF;">+ reverb</div>
+        <div style="font-size: 25px; color: #DCEFF7; margin-top: 8px;">light, cavernous</div>
+      </div>
+      <div style="color: #5E8AA8; font-size: 34px;">→</div>
+      <div style="flex: 1; border-radius: 16px; border: 1px solid rgba(217,130,43,.4); background: rgba(217,130,43,.08); padding: 26px 28px;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #F0A65A;">request.speak.audio</div>
+        <div style="font-size: 25px; color: #DCEFF7; margin-top: 8px;">served over HTTP · lip-synced</div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 14px; margin-top: 44px; font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #7FA9C0;"><span style="color:#9BE8FF; font-size: 26px;">↳</span> no edge-tts / pydub → falls back to the plain TTS avatar voice</div>
+  </section>
+</div>
+<div class="slide">
+<section data-label="Custom face" data-speaker-notes="One catch: the Realtime API can only select an installed face — it can't paint a new marking. So the arrow is baked straight into a custom skin texture and shipped as an asset pack. The pack holds two characters on the same skin — the everyday blue arrow, and the glowing white version with ghost eyes. The app just swaps between them with face.config." style="padding: 90px 110px 84px; display: flex; flex-direction: column; font-family: 'Archivo', sans-serif; color: #2A2018; overflow: hidden; background: radial-gradient(circle at 12% 16%, rgba(217,123,43,.12), transparent 46%), #F2E9DA;">
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; letter-spacing: 3px; text-transform: uppercase; color: #B5631A; margin-bottom: 16px;">The face</div>
+    <h2 style="font-family: 'Spectral', serif; font-weight: 600; font-size: 60px; line-height: 1.04; letter-spacing: -.5px;">The arrow is baked in</h2>
+    <p style="font-size: 30px; line-height: 1.4; color: #6E5F4C; margin-top: 18px; max-width: 52ch;">The API can <em>select</em> a face, never paint one. So the tattoo lives in a custom skin texture, shipped as an asset pack — one pack, two characters on the same skin.</p>
+
+    <div style="display: flex; gap: 28px; margin-top: 50px; align-items: stretch;">
+      <div style="flex: 1; border-radius: 20px; border: 1px solid rgba(42,32,24,.14); background: #FBF6EC; padding: 36px 38px; display: flex; flex-direction: column; align-items: flex-start;">
+        <svg viewBox="0 0 100 130" width="86" height="112"><path d="M38 2 H62 V58 H80 L50 122 L20 58 H38 Z" fill="#2A6BC0"/></svg>
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #2A6BC0; margin-top: 26px;">adult — Aang4</div>
+        <div style="font-size: 27px; color: #2A2018; margin-top: 10px; line-height: 1.4;">warm Mediterranean skin · deep-blue arrow · blue-grey eyes</div>
+      </div>
+      <div style="flex: 1; border-radius: 20px; border: 1px solid rgba(42,32,24,.14); background: #1C1813; padding: 36px 38px; display: flex; flex-direction: column; align-items: flex-start;">
+        <svg viewBox="0 0 100 130" width="86" height="112" style="filter: drop-shadow(0 0 16px rgba(155,232,255,.7));"><path d="M38 2 H62 V58 H80 L50 122 L20 58 H38 Z" fill="#FFFFFF"/></svg>
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #9BE8FF; margin-top: 26px;">adult — Aang4Avatar</div>
+        <div style="font-size: 27px; color: #E9DEC8; margin-top: 10px; line-height: 1.4;"><em>same skin</em> · glowing white arrow + bloom · solid-white ghost eyes</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 16px; margin-top: 34px; font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #6E5F4C;"><span style="color:#D9822B; font-size: 26px;">⇄</span> swapped live by <span style="color:#2A2018;">request.face.config</span> on enter / exit</div>
+  </section>
+</div>
+<div class="slide">
+<section data-label="Resilience" data-speaker-notes="Two things make this survive a live demo. First, the WebSocket drops sometimes — a robot blip, an idle close. A background reader flips a flag, the main loop notices, reconnects, re-authenticates, resets the Avatar State, and re-dresses the robot from scratch: voice, face, LEDs, listen config. Second, no API keys? It still runs — canned in-character lines instead of a live brain, and plain TTS instead of the chorus. The show never stops." style="padding: 90px 110px 84px; display: flex; flex-direction: column; font-family: 'Archivo', sans-serif; color: #2A2018; overflow: hidden; background: radial-gradient(circle at 14% 18%, rgba(42,107,192,.1), transparent 46%), #F2E9DA;">
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; letter-spacing: 3px; text-transform: uppercase; color: #B5631A; margin-bottom: 16px;">Built to survive a live demo</div>
+    <h2 style="font-family: 'Spectral', serif; font-weight: 600; font-size: 60px; line-height: 1.04; letter-spacing: -.5px;">It always keeps running</h2>
+
+    <div style="display: flex; gap: 28px; margin-top: 50px; align-items: stretch; flex: 1;">
+      <div style="flex: 1; border-radius: 20px; border: 1px solid rgba(42,107,192,.3); background: #FBF6EC; padding: 38px 36px; display: flex; flex-direction: column;">
+        <div style="font-family: 'Spectral', serif; font-weight: 600; font-size: 36px; color: #2A6BC0;">When the socket drops</div>
+        <p style="font-size: 26px; color: #6E5F4C; margin-top: 10px; line-height: 1.35;">A blip or idle close flips a flag the reader thread watches.</p>
+        <ul style="list-style: none; margin-top: 22px; display: flex; flex-direction: column; gap: 13px; font-size: 25px; line-height: 1.3;">
+          <li style="display:flex; gap:12px;"><span style="color:#2A6BC0;">→</span> reconnect &amp; re-authenticate</li>
+          <li style="display:flex; gap:12px;"><span style="color:#2A6BC0;">→</span> reset the Avatar State to clean</li>
+          <li style="display:flex; gap:12px;"><span style="color:#2A6BC0;">→</span> re-dress: voice · face · LEDs · listen</li>
+        </ul>
+      </div>
+      <div style="flex: 1; border-radius: 20px; border: 1px solid rgba(217,130,43,.35); background: #FBF6EC; padding: 38px 36px; display: flex; flex-direction: column;">
+        <div style="font-family: 'Spectral', serif; font-weight: 600; font-size: 36px; color: #B5631A;">When the keys are missing</div>
+        <p style="font-size: 26px; color: #6E5F4C; margin-top: 10px; line-height: 1.35;">No credentials, no crash — it degrades in character.</p>
+        <ul style="list-style: none; margin-top: 22px; display: flex; flex-direction: column; gap: 13px; font-size: 25px; line-height: 1.3;">
+          <li style="display:flex; gap:12px;"><span style="color:#D9822B;">→</span> no LLM key → canned in-character lines</li>
+          <li style="display:flex; gap:12px;"><span style="color:#D9822B;">→</span> no edge-tts → plain TTS avatar voice</li>
+          <li style="display:flex; gap:12px;"><span style="color:#D9822B;">→</span> he still talks, still surges, still performs</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="slide">
+<section data-label="Stack" data-speaker-notes="That's the whole thing: one WebSocket, a brain that tags its own state, and a choreographed surge with a layered chorus voice — running on a free stack. Everything is an env var, so there's nothing to edit to retune it. May the spirits watch over you." style="padding: 100px 110px 90px; display: flex; flex-direction: column; justify-content: center; font-family: 'Archivo', sans-serif; color: #2A2018; overflow: hidden; background: radial-gradient(circle at 82% 16%, rgba(217,123,43,.14), transparent 46%), radial-gradient(circle at 14% 88%, rgba(42,107,192,.1), transparent 50%), #F2E9DA;">
+    <div style="display: flex; align-items: center; gap: 60px;">
+      <div style="flex: 1;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; letter-spacing: 3px; text-transform: uppercase; color: #B5631A; margin-bottom: 18px;">The stack</div>
+        <h2 style="font-family: 'Spectral', serif; font-weight: 600; font-size: 64px; line-height: 1.02; letter-spacing: -.5px;">All free, all swappable</h2>
+        <ul style="list-style: none; margin-top: 38px; display: flex; flex-direction: column; gap: 16px; font-size: 27px; line-height: 1.3;">
+          <li style="display:flex; gap:16px;"><span style="font-family:'IBM Plex Mono',monospace; color:#2A6BC0; min-width: 12.5ch;">Realtime API</span> <span style="color:#6E5F4C;">WebSocket on :9000 · websocket-client</span></li>
+          <li style="display:flex; gap:16px;"><span style="font-family:'IBM Plex Mono',monospace; color:#2A6BC0; min-width: 12.5ch;">brain</span> <span style="color:#6E5F4C;">Groq free tier · Anthropic · canned fallback</span></li>
+          <li style="display:flex; gap:16px;"><span style="font-family:'IBM Plex Mono',monospace; color:#2A6BC0; min-width: 12.5ch;">chorus voice</span> <span style="color:#6E5F4C;">edge-tts + pydub, served over HTTP</span></li>
+          <li style="display:flex; gap:16px;"><span style="font-family:'IBM Plex Mono',monospace; color:#2A6BC0; min-width: 12.5ch;">wind &amp; face</span> <span style="color:#6E5F4C;">numpy + PIL — generated WAV &amp; baked texture</span></li>
+        </ul>
+        <p style="font-size: 25px; color: #B5631A; margin-top: 32px; font-family: 'IBM Plex Mono', monospace;">every setting is an env var — nothing to edit to retune</p>
+      </div>
+      <div style="flex: 0 0 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px;">
+        <svg viewBox="0 0 100 130" width="200" height="260" style="animation: floatY 6s ease-in-out infinite;">
+          <path d="M38 2 H62 V58 H80 L50 122 L20 58 H38 Z" fill="#2A6BC0"/>
+        </svg>
+        <div style="font-family: 'Spectral', serif; font-style: italic; font-size: 28px; color: #B5631A; text-align: center; line-height: 1.3;">May the spirits<br>watch over you.</div>
+      </div>
+    </div>
+  </section>
+</div>
+</div></div>
+
+<div id="hud">
+  <span class="count">1 / 9</span><span class="sep">·</span><span class="label"></span>
+  <span class="sep">·</span><span class="hint">&larr; &rarr; / space &nbsp; N notes &nbsp; F full &nbsp; R reset</span>
+</div>
+<div id="notes"><div class="nlabel"></div><div class="nbody"></div></div>
+
+<script>
+  const stage  = document.getElementById('stage');
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const hud    = document.getElementById('hud');
+  const elCount = hud.querySelector('.count');
+  const elLabel = hud.querySelector('.label');
+  const notes  = document.getElementById('notes');
+  const nLabel = notes.querySelector('.nlabel');
+  const nBody  = notes.querySelector('.nbody');
+  let i = 0, notesOn = false, idleT;
+
+  function fit() {
+    const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    stage.style.transform = `translate(-50%,-50%) scale(${s})`;
+  }
+  function poke() {
+    hud.classList.remove('idle');
+    clearTimeout(idleT);
+    idleT = setTimeout(() => hud.classList.add('idle'), 2800);
+  }
+  function show(n) {
+    i = (n + slides.length) % slides.length;
+    slides.forEach((sl, k) => sl.classList.toggle('active', k === i));
+    const sec = slides[i].querySelector('section');
+    const label = (sec && sec.dataset.label) || '';
+    elCount.textContent = `${i + 1} / ${slides.length}`;
+    elLabel.textContent = label;
+    nLabel.textContent  = label;
+    nBody.textContent   = (sec && sec.dataset.speakerNotes) || '(no notes for this slide)';
+    history.replaceState(null, '', `#slide=${i + 1}`);
+    poke();
+  }
+  const next = () => show(i + 1);
+  const prev = () => show(i - 1);
+  const toggleNotes = () => notes.classList.toggle('show', (notesOn = !notesOn));
+  function toggleFs() {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+    else document.exitFullscreen && document.exitFullscreen();
+  }
+
+  addEventListener('keydown', (e) => {
+    switch (e.key) {
+      case 'ArrowRight': case 'PageDown': next(); e.preventDefault(); break;
+      case 'ArrowLeft':  case 'PageUp':   prev(); e.preventDefault(); break;
+      case ' ': case 'Spacebar':  e.shiftKey ? prev() : next(); e.preventDefault(); break;
+      case 'Home': show(0); break;
+      case 'End':  show(slides.length - 1); break;
+      case 'r': case 'R': show(0); break;
+      case 'n': case 'N': case 's': case 'S': toggleNotes(); break;
+      case 'f': case 'F': toggleFs(); break;
+    }
+  });
+  // click the stage to advance; ignore clicks on the HUD / notes drawer or while selecting text
+  addEventListener('click', (e) => {
+    if (e.target.closest('#hud, #notes')) return;
+    if (String(getSelection())) return;
+    next();
+  });
+  addEventListener('mousemove', poke);
+  addEventListener('resize', fit);
+
+  fit();
+  const m = location.hash.match(/slide=(\d+)/);
+  show(m ? (+m[1] - 1) : 0);
+</script>
+</body>
+</html>
