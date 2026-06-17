@@ -1,0 +1,3 @@
+websocket-client>=1.6      # Furhat Realtime API (WebSocket) client
+requests>=2.31             # LLM brain (Groq / Anthropic HTTP)
+numpy>=1.24                # only for the Avatar State wind SFX (optional)
