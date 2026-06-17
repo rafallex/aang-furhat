@@ -25,3 +25,7 @@ The detail that really sells it is the voice. In the Avatar State, Aang doesn't 
 ## 6. Custom face
 
 The look was its own challenge. Furhat projects a face onto a physical mask, and the system can only pick from faces that are already installed — it can't draw a new marking like Aang's arrow. So I baked the tattoo straight into the projector's skin texture and shipped two versions of him on the same skin: the everyday blue arrow, and the glowing white one with ghost eyes. The app just swaps between them live as he transforms.
+
+## 7. Closing
+
+To wrap up: I built a whole character, start to finish — and along the way I learned the robot's capabilities and limits inside-out, and how to make something feel genuinely alive. Where it goes next: the same engine could carry more characters, and with more time I'd productionize it for an always-on exhibit. Thank you — and may the spirits watch over you.
