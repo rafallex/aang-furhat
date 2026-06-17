@@ -20,7 +20,7 @@ class Config:
 
     # ---- Look ----
     # face_id must be one of the robot's installed faces (see tools/probe.py).
-    # "adult - Aang3" is the everyday face; "adult - Aang3Avatar" is the glowing Avatar-State
+    # "adult - Aang4" is the everyday face; "adult - Aang4Avatar" is the glowing Avatar-State
     # variant (build + install both via tools/import_aang_face.py).
     face_id: str = _env("AANG_FACE", "adult - Aang4")
     face_id_avatar: str = _env("AANG_FACE_AVATAR", "adult - Aang4Avatar")
