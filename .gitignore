@@ -11,13 +11,6 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Kotlin / Gradle build artifacts
-sdk/aang/build/
-sdk/aang/.gradle/
-.gradle/
-build/
-*.skill
-
 # Built face pack + extracted Furhat asset textures (derived; regenerate via build_aang_face.py)
 face/Aang.zip
 face/Aang/

@@ -120,13 +120,11 @@ atop `face/build_aang_face.py`, rebuild, redeploy, **restart**, select. (Restart
 slow part — get placement right in as few as possible.) The skin **hue** can be nudged
 live via the character profile's `tm_skins_c` tint without a restart.
 
-## Two implementations
+## Prebuilt binary
 
-This repo carries the **Realtime API** Python app (above) — the one you run with
-`python aang_app.py`. There's also a **Furhat SDK** Kotlin skill under `sdk/` (the
-AI-Creator / FaceCore path) — see [`sdk/README.md`](sdk/README.md). Prebuilt binaries
-(the face pack and the compiled skill) are attached to the GitHub
-[**v1.0** release](https://github.com/rafallex/aang-furhat/releases/tag/v1.0).
+Don't want to bake the face yourself? The ready-to-install face pack (`Aang.zip`) is
+attached to the GitHub [**v1.0** release](https://github.com/rafallex/aang-furhat/releases/tag/v1.0) —
+download it and skip straight to `python tools/import_aang_face.py deploy`.
 
 ## Stack
 
