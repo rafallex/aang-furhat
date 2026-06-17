@@ -12,6 +12,7 @@ import os
 import wave
 import socket
 import asyncio
+import warnings
 import functools
 import threading
 import subprocess
@@ -19,10 +20,18 @@ import http.server
 
 import edge_tts
 import imageio_ffmpeg
-from pydub import AudioSegment
-from pydub.effects import speedup
 
+# imageio-ffmpeg ships a real ffmpeg, but NOT under the bare name "ffmpeg", so pydub's
+# import-time PATH probe misses it and prints a RuntimeWarning. Point pydub straight at the
+# imageio binary (and silence that one cosmetic warning). We still route all WAV I/O through
+# the stdlib `wave` module, so ffprobe — which imageio doesn't ship — is never needed.
 _FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", RuntimeWarning)
+    from pydub import AudioSegment
+    from pydub.effects import speedup
+AudioSegment.converter = _FFMPEG
+AudioSegment.ffmpeg = _FFMPEG
 EDGE_VOICE = os.environ.get("AANG_FX_VOICE", "en-US-ChristopherNeural")
 OUT_DIR = os.environ.get("AANG_FX_DIR", os.path.join(os.environ.get("TEMP", "."), "aang_fx"))
 os.makedirs(OUT_DIR, exist_ok=True)
