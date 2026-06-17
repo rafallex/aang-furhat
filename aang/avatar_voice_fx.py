@@ -102,7 +102,7 @@ def _pitch_keep_time(seg, semitones):
     return shifted
 
 
-def _reverb(seg, taps=((105, -24), (200, -34))):   # faint hint of space, echoes well below the voice
+def _reverb(seg, taps=((110, -30),)):   # minimal reverb: one very faint echo (was a heavier double tap)
     out = seg
     for delay_ms, gain_db in taps:
         echo = (AudioSegment.silent(duration=delay_ms, frame_rate=seg.frame_rate) + seg).apply_gain(gain_db)
