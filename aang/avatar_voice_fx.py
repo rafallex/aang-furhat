@@ -102,7 +102,7 @@ def _pitch_keep_time(seg, semitones):
     return shifted
 
 
-def _reverb(seg, taps=((110, -30),)):   # minimal reverb: one very faint echo (was a heavier double tap)
+def _reverb(seg, taps=((100, -19), (185, -27))):   # a little space (mountain echo) - well short of the old cavern, no doubling
     out = seg
     for delay_ms, gain_db in taps:
         echo = (AudioSegment.silent(duration=delay_ms, frame_rate=seg.frame_rate) + seg).apply_gain(gain_db)
@@ -110,7 +110,9 @@ def _reverb(seg, taps=((110, -30),)):   # minimal reverb: one very faint echo (w
     return out
 
 
-async def _tts(text, mp3_path, voice=EDGE_VOICE, rate="-12%", pitch="-6Hz"):
+async def _tts(text, mp3_path, voice=EDGE_VOICE, rate="-8%", pitch="-30Hz"):
+    # Depth from the engine's OWN pitch (clean) -- not a pydub pitch-shift (that time-stretch
+    # was the "prolonged echo"). rate slightly slow for gravitas without dragging.
     await edge_tts.Communicate(text, voice, rate=rate, pitch=pitch).save(mp3_path)
 
 
@@ -123,16 +125,12 @@ def render(text, name="avatar"):
                    check=True, capture_output=True)
     base = _read_wav(raw)
 
-    # Pitch the layers WITHOUT stretching time so nothing drones on past the words.
-    lead = _pitch_keep_time(base, -2)                       # main voice, a touch deeper
-    deep = _pitch_keep_time(base, -9).apply_gain(-7)        # quiet rumble underneath
-    twin = (AudioSegment.silent(duration=22, frame_rate=base.frame_rate)
-            + base).apply_gain(-7)                          # short-delayed double for chorus width
-
-    n = max(len(lead), len(deep), len(twin))
-    mix = AudioSegment.silent(duration=n + 260, frame_rate=base.frame_rate)
-    mix = mix.overlay(lead).overlay(deep).overlay(twin)
-    mix = _reverb(mix).normalize(headroom=3.0)
+    # Depth comes from the TTS engine's own pitch (see _tts: pitch="-30Hz"), NOT a pydub
+    # pitch-shift: the pydub time-stretch that kept duration crossfaded chunks, and THAT was
+    # the "prolonged echo" -- not the reverb. So take the deep TTS voice as-is and add ONE
+    # faint short echo for a hint of space. Dial by ear: raise/lower the -26 dB, shift the 75 ms.
+    voice = base
+    mix = _reverb(voice, taps=((75, -26),)).normalize(headroom=3.0)
     _write_wav(mix, out)
     return out
 

@@ -25,6 +25,14 @@ GLOW_WHITE = "#FFFFFF"    # full Avatar-State surge
 # Flip the sign if your unit looks down instead.
 LOOK_UP_PITCH = 12.0
 
+# The furious wide-eyed glare (stand-in until a custom glowing-eyes texture exists).
+# Re-applied each turn by assert_look() so the stare never relaxes mid-rage.
+AVATAR_STARE = {
+    "EYE_WIDE_LEFT": 1.0, "EYE_WIDE_RIGHT": 1.0,
+    "BROW_DOWN_LEFT": 1.0, "BROW_DOWN_RIGHT": 1.0,   # FURIOUS furrow, not a serene stare
+    "BLINK_LEFT": 0.0, "BLINK_RIGHT": 0.0,
+}
+
 
 def scale_hex(hex_color, factor):
     """Scale an #RRGGBB color toward black by `factor` in [0, 1]."""
@@ -75,11 +83,7 @@ class AvatarState:
 
         # 3. Snap the eyes wide — the glowing-eyes stand-in until a custom texture exists.
         f.led("#000000")
-        f.face_params({
-            "EYE_WIDE_LEFT": 1.0, "EYE_WIDE_RIGHT": 1.0,
-            "BROW_DOWN_LEFT": 1.0, "BROW_DOWN_RIGHT": 1.0,   # FURIOUS furrow, not a serene stare
-            "BLINK_LEFT": 0.0, "BLINK_RIGHT": 0.0,
-        })
+        f.face_params(AVATAR_STARE)
 
         # 4. The rushing wind.
         if self.sfx:
@@ -140,3 +144,14 @@ class AvatarState:
             f.led(scale_hex(GLOW_CYAN, k / 10.0))
             time.sleep(0.05)
         f.led(CALM_BLUE)
+
+    # ------------------------------------------------------------------ self-heal
+    def assert_look(self):
+        """Re-assert the intended face each turn so a face-swap dropped over the network
+        auto-corrects. While enraged, also re-apply the wide-eyed glare so it never relaxes
+        mid-rage. Re-selecting the already-active face is a no-op, so there's no flicker."""
+        if self.active:
+            self.f.face_config(face_id=self.cfg.face_id_avatar, blinking=False, microexpressions=False)
+            self.f.face_params(AVATAR_STARE)
+        else:
+            self.f.face_config(face_id=self.cfg.face_id, blinking=True, microexpressions=True)

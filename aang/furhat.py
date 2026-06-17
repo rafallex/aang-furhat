@@ -258,8 +258,11 @@ class FurhatRT:
                           no_speech_timeout=no_speech_timeout, end_speech_timeout=end_speech_timeout)
         msg = self.wait_for(("response.hear.end", "response.listen.end"),
                             timeout=timeout, tick=tick)
+        # Always close the listen session: the mic is then OFF while Aang thinks and
+        # speaks (so he can't hear himself), and no session is left dangling for the
+        # next listen_start ("Cannot start listening while already listening").
+        self.listen_stop()
         if msg is None:
-            self.listen_stop()
             return None
         if msg.get("type") == "response.hear.end":
             return (msg.get("text") or "").strip() or None
