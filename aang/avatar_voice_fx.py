@@ -1,8 +1,10 @@
-"""Render the AVATAR-STATE voice: the show's effect is the actor's voice layered with
-detuned copies (the chorus of past Avatars) plus heavy reverb. We generate neural TTS
-(keyless, via edge-tts) and process it with pydub into that otherworldly, booming chorus.
+"""Render the AVATAR-STATE voice: a SINGLE deep, DRY voice. We re-synthesize the line with
+keyless neural TTS (edge-tts) and drop the engine's OWN pitch well below normal (~-30Hz) so
+the depth is clean -- NO reverb, NO layered/detuned "chorus" copies. The old "chorus of past
+lives + heavy reverb" was dropped: it doubled and sounded muddy on the robot's own speaker.
 
-render(text) -> path to a WAV the robot can play via request.speak.audio(lipsync=True).
+render(text) -> path to a WAV the robot can play via request.speak.audio (the audio FILE is
+the voice; the text field is lip-sync only).
 
 ffmpeg (from imageio-ffmpeg) is used ONLY to decode the mp3; all WAV I/O goes through the
 stdlib `wave` module so pydub never needs ffprobe (which imageio doesn't ship).
@@ -29,7 +31,6 @@ _FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 with warnings.catch_warnings():
     warnings.simplefilter("ignore", RuntimeWarning)
     from pydub import AudioSegment
-    from pydub.effects import speedup
 AudioSegment.converter = _FFMPEG
 AudioSegment.ffmpeg = _FFMPEG
 EDGE_VOICE = os.environ.get("AANG_FX_VOICE", "en-US-ChristopherNeural")
@@ -83,31 +84,6 @@ def _write_wav(seg, path):
     with wave.open(path, "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(24000)
         w.writeframes(seg.raw_data)
-
-
-def _pitch(seg, semitones):
-    rate = int(seg.frame_rate * (2.0 ** (semitones / 12.0)))
-    return seg._spawn(seg.raw_data, overrides={"frame_rate": rate}).set_frame_rate(seg.frame_rate)
-
-
-def _pitch_keep_time(seg, semitones):
-    """Pitch-shift WITHOUT changing duration (so layers don't drone past the words)."""
-    shifted = _pitch(seg, semitones)
-    factor = 2.0 ** (-semitones / 12.0)   # how much longer _pitch made it
-    if factor > 1.01:
-        try:
-            shifted = speedup(shifted, playback_speed=factor, chunk_size=120, crossfade=20)
-        except Exception:
-            pass
-    return shifted
-
-
-def _reverb(seg, taps=((100, -19), (185, -27))):   # a little space (mountain echo) - well short of the old cavern, no doubling
-    out = seg
-    for delay_ms, gain_db in taps:
-        echo = (AudioSegment.silent(duration=delay_ms, frame_rate=seg.frame_rate) + seg).apply_gain(gain_db)
-        out = out.overlay(echo)
-    return out
 
 
 async def _tts(text, mp3_path, voice=EDGE_VOICE, rate="-8%", pitch="-30Hz"):

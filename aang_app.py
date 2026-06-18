@@ -1,14 +1,16 @@
 """Aang on Furhat — the main show.
 
 A full conversational Avatar (Listen -> LLM -> Speak) wearing the closest stock
-face to a 12-year-old Air Nomad, who can unlock the AVATAR STATE either by a
-spoken trigger phrase or a keyboard hotkey.
+face to a 12-year-old Air Nomad. Conversation is hands-free OPEN-MIC by default:
+just talk. The AVATAR STATE SELF-TRIGGERS — the LLM tags each turn [CALM]/[AVATAR]
+and surges into it on its own (no keyword, no button). Spoken trigger phrases and
+the [a] hotkey are only optional MANUAL OVERRIDES; push-to-talk is an optional
+AANG_PTT=1 fallback (hold [space] to talk).
 
-Run:   python aang_app.py
-Keys:  [space] talk (push-to-talk)   [a] Avatar State   [q] quit
+Run:   conda activate furhat   then   python -u aang_app.py
+Keys:  [a] Avatar State (manual override)   [q] quit   [space] talk (PTT, if AANG_PTT=1)
 
-Speech triggers:
-  auto  -> the LLM surges into the Avatar State on its own when stakes get dire
+Manual overrides (all optional — the LLM tag drives the Avatar State on its own):
   enter -> "the world needs the avatar", "avatar state", "go avatar", ...
   exit  -> "come back Aang", "calm down", "that's enough", ...
   quit  -> "goodbye Aang", "shut down"
@@ -286,7 +288,7 @@ def main():
             elif (not want_avatar) and avatar.active:
                 avatar.exit(speak=False)           # recede to young Aang
 
-            # rage lines speak as the layered Avatar chorus; everything else, normal voice
+            # rage lines speak in the single deep Avatar voice; everything else, normal voice
             last_said = reply
             (say_avatar if want_avatar else f.say_and_wait)(reply)
 

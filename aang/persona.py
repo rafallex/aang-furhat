@@ -60,13 +60,6 @@ ENTER_LINES = [
     "You face every Avatar who has ever lived. TREMBLE - and answer for what you have done.",
 ]
 
-# Spoken as the Avatar State fades back to young Aang (manual trigger only).
-EXIT_LINES = [
-    "The power recedes. The many become one once more.",
-    "Balance returns. We step back into the quiet.",
-    "It is enough. The Avatar State subsides.",
-]
-
 # Short canned lines if no LLM key is set, so the demo still runs.
 FALLBACKS = [
     "Hmm, my head's a little cloudy right now, like Appa shed all over it. Ask me again?",
