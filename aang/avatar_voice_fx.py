@@ -123,25 +123,12 @@ def render(text, name="avatar"):
     asyncio.run(_tts(text, mp3))
     subprocess.run([_FFMPEG, "-y", "-i", mp3, "-ac", "1", "-ar", "24000", raw],
                    check=True, capture_output=True)
-    main = _read_wav(raw)   # main deep voice -- depth comes from the TTS pitch (see _tts)
+    main = _read_wav(raw)   # the deep voice -- depth comes from the TTS pitch (see _tts)
 
-    # The "SECOND WAVE": a much deeper, drawn-out ghost of the line that rolls back in as the
-    # main line ENDS and trails off afterward (the chorus of past Avatars from the depths).
-    # _pitch lowers pitch AND stretches time, so the ghost is naturally slow + cavernous. It
-    # must start near the END of the line, never sit on top of it -- overlapping the main voice
-    # is what sounds like a doubled "speaks twice". Tunables:
-    GHOST_SEMITONES = -7      # how much DEEPER the ghost is (also = how drawn-out)
-    GHOST_GAIN_DB   = -9      # how much QUIETER the ghost is
-    GHOST_LEAD_MS   = 400     # ghost starts this many ms BEFORE the line ends
-    GHOST_TAPS      = ((160, -20), (340, -28))   # cavern tail on the ghost only
-
-    ghost  = _reverb(_pitch(main, GHOST_SEMITONES).apply_gain(GHOST_GAIN_DB), taps=GHOST_TAPS)
-    delay  = max(0, len(main) - GHOST_LEAD_MS)
-    second = AudioSegment.silent(duration=delay, frame_rate=main.frame_rate) + ghost
-
-    n = max(len(main), len(second))
-    mix = AudioSegment.silent(duration=n + 500, frame_rate=main.frame_rate)
-    mix = mix.overlay(main).overlay(second).normalize(headroom=3.0)
+    # Deep voice + a FAINT hint of room: two short, quiet reflections on the SAME voice, just
+    # enough space to feel a little bigger. NOT an echo-repeat and NOT a layered "second wave"
+    # -- those read as a doubled voice, which we don't want. Single, clean, dramatic.
+    mix = _reverb(main, taps=((55, -23), (110, -30))).normalize(headroom=3.0)
     _write_wav(mix, out)
     return out
 
