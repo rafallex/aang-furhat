@@ -27,6 +27,9 @@ class Config:
 
     # ---- Voices (exact voice_id strings confirmed installed on this robot) ----
     voice_normal: str = _env("AANG_VOICE", "Justin-Neural (en-US) - Amazon Polly")
+    # NOTE: voice_avatar applies ONLY to the native-voice fallback. The rendered deep
+    # voice uses the edge-tts voice AANG_FX_VOICE (in avatar_voice_fx.py), so changing
+    # AANG_VOICE_AVATAR has no effect unless AANG_AVATAR_FX=0.
     voice_avatar: str = _env("AANG_VOICE_AVATAR", "ChristopherNeural (en-US) - Microsoft Azure")
     volume: int = int(_env("AANG_VOLUME", "60"))
     volume_avatar: int = int(_env("AANG_VOLUME_AVATAR", "72"))  # a touch louder while enraged (not blasting)

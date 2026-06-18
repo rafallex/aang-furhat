@@ -2,10 +2,10 @@
 websocket-client>=1.6      # Furhat Realtime API (WebSocket) client
 requests>=2.31             # LLM brain (Groq / Anthropic HTTP)
 
-# --- Avatar-State chorus voice (aang/avatar_voice_fx.py) ---
-# Without these the Avatar lines fall back to plain TTS instead of the layered chorus.
+# --- Avatar-State deep voice (aang/avatar_voice_fx.py) ---
+# Without these the Avatar lines fall back to the robot's native deep voice.
 edge-tts>=6.1              # keyless neural TTS (the base voice)
-pydub>=0.25                # layering / pitch-shift / reverb
+pydub>=0.25                # WAV handling / normalize for the deep voice render (pitch comes from edge-tts, not pydub)
 imageio-ffmpeg>=0.4        # bundles the ffmpeg binary pydub needs (no system install)
 
 # --- Avatar-State wind SFX (aang/sfx.py) ---

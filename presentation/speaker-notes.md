@@ -1,6 +1,6 @@
 # Aang on Furhat — speaker notes
 
-_9-slide technical deep-dive. ~3-min lightning talk._
+_7-slide technical deep-dive. ~3-min lightning talk._
 
 ## 1. Title
 
@@ -8,7 +8,7 @@ This is what I built during my internship: Aang, from Avatar: The Last Airbender
 
 ## 2. What I built
 
-At a glance: a complete, working character. He turns toward whoever's speaking, greets them, and holds a genuine back-and-forth in character. He decides on his own when the stakes are high enough to transform. He has a custom face and a layered voice I built from scratch. And he recovers from problems without being babysat. Under the hood it's simple to describe — he listens, thinks, and speaks on a loop. Nothing is installed on the robot itself; my code drives it live over the network.
+At a glance: a complete, working character. He turns toward whoever's speaking, greets them, and holds a genuine back-and-forth in character. He decides on his own when the stakes are high enough to transform. He has a custom face and a deep Avatar-State voice I built from scratch. And he recovers from problems without being babysat. Under the hood it's simple to describe — he listens, thinks, and speaks on a loop. Nothing is installed on the robot itself; my code drives it live over the network.
 
 ## 3. The brain decides
 
@@ -18,9 +18,9 @@ This is the piece I'm proudest of. There's no keyword and no button. Every singl
 
 And here's the payoff. The instant that verdict says surge, one trigger fires a whole performance: his face transforms to the glowing version, his eyes lock into an unblinking stare, the light ring surges up and starts breathing, his head rises to the sky, and the wind rushes in. It's choreographed to feel like the show.
 
-## 5. Chorus voice
+## 5. The Avatar voice
 
-The detail that really sells it is the voice. In the Avatar State, Aang doesn't use the robot's normal text-to-speech. Each line is rendered by a neural voice, then layered with slightly detuned copies of itself plus a touch of reverb — so one line sounds like a thousand past lives speaking as one. It's built fresh for every line and played back in sync.
+The detail that really sells it is the voice. In the Avatar State, Aang doesn't use the robot's normal text-to-speech. Each line is re-synthesized with the voice pitched far below normal into one deep, dry, commanding voice — no layered copies, no reverb. I actually tried a layered chorus-plus-reverb first, to sound like a thousand past lives speaking as one, but I dropped it: on the robot's own speaker it doubled up and went muddy. The single deep voice is rendered fresh for every line as an audio file and lip-synced to his mouth.
 
 ## 6. Custom face
 

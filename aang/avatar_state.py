@@ -7,6 +7,9 @@ exit()   -> wind everything back down to the calm young monk.
 
 While active, a background thread keeps the LED ring "breathing" so the glow
 never looks static during conversation.
+
+Note: the spoken awakening line is now driven by say_avatar in aang_app.py (deep-voice
+FX); enter(speak=True) is a legacy/standalone path.
 """
 
 import math
@@ -14,7 +17,7 @@ import time
 import random
 import threading
 
-from .persona import ENTER_LINES, EXIT_LINES
+from .persona import ENTER_LINES
 
 # ----- palette -----
 CALM_BLUE = "#2A6BC0"     # airbender calm (idle)
