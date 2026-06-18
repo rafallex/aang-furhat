@@ -113,17 +113,17 @@ def main():
 
     avatar = AvatarState(f, cfg, sfx)
 
-    # Avatar-State voice. Default: render a deep "second wave" FX file (avatar_voice_fx.render
-    # -- the main deep voice + a much deeper ghost that rolls back in AFTER the line) and play
-    # it via request.speak.audio (the FILE is the voice; text=<line> is lip-sync only). Needs
-    # the robot to fetch the file from this PC (works on Ethernet). Falls back to the robot's
+    # Avatar-State voice. Default: render a deep voice (avatar_voice_fx.render -- the line
+    # re-spoken with the TTS engine's pitch dropped, dry/no reverb) and play it via
+    # request.speak.audio (the FILE is the voice; text=<line> is lip-sync only). Needs the
+    # robot to fetch the file from this PC (works on Ethernet). Falls back to the robot's
     # plain native deep voice if rendering/playback fails or AANG_AVATAR_FX=0.
     fx_ok = False
     if cfg.avatar_voice_fx:
         try:
             fx_url = voicefx.ensure_server()
             fx_ok = True
-            print(f"Avatar voice FX (second wave): {fx_url}")
+            print(f"Avatar voice FX (deep voice): {fx_url}")
         except Exception as e:
             print(f"Avatar voice FX disabled ({e}) - using native deep voice")
 

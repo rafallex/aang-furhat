@@ -31,7 +31,7 @@ class Config:
     volume: int = int(_env("AANG_VOLUME", "60"))
     volume_avatar: int = int(_env("AANG_VOLUME_AVATAR", "72"))  # a touch louder while enraged (not blasting)
 
-    # Avatar-State voice: render a deep "second wave" FX file (1, default) or use the robot's
+    # Avatar-State voice: render a deep-voice FX file (1, default) or use the robot's
     # plain deep native voice (0). FX needs the robot to fetch the audio from this PC (Ethernet).
     avatar_voice_fx: bool = _env("AANG_AVATAR_FX", "1") == "1"
 
