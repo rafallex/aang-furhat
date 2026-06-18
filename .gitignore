@@ -14,6 +14,7 @@ __pycache__/
 # Built face pack + extracted Furhat asset textures (derived; regenerate via build_aang_face.py)
 face/Aang.zip
 face/Aang/
+face/aang_face_preview.png
 
 # JetBrains IDE (PyCharm) project config
 .idea/

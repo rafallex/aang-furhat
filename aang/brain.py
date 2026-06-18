@@ -14,10 +14,13 @@ Provider is pluggable:
 import os
 import re
 import random
+import logging
 
 import requests
 
 from .persona import SYSTEM_NORMAL, SYSTEM_AVATAR, FALLBACKS
+
+log = logging.getLogger(__name__)
 
 _TAG_RE = re.compile(r"\[\s*(avatar|calm)\s*\]", re.IGNORECASE)
 
@@ -30,6 +33,7 @@ class Brain:
         self.anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
 
         self.provider = cfg.brain_provider
+        self._fail_count = 0           # consecutive live-call failures
         if self.provider == "groq" and not self.groq_key:
             self.provider = "none"
         elif self.provider == "anthropic" and not self.anthropic_key:
@@ -58,13 +62,36 @@ class Brain:
                 raw = self._anthropic(system)
             else:
                 raw = random.choice(FALLBACKS)
+            self._fail_count = 0
         except Exception as e:
-            print(f"[brain] {self.provider} call failed ({e}); using fallback.")
+            self._note_failure(e)
             raw = random.choice(FALLBACKS)
 
         want_avatar, text = self._parse(raw or "", avatar)
         self.history.append({"role": "assistant", "content": text})
         return want_avatar, text
+
+    def _note_failure(self, e):
+        """React to a failed live LLM call. An auth error (bad/expired key) is permanent, so
+        disable the live brain immediately and warn ONCE -- otherwise every turn silently hits
+        the dead endpoint and returns canned lines while the robot looks fine. Transient errors
+        (timeout / 429 / 5xx) only disable after a few in a row, so one network blip doesn't
+        kill the brain for the session."""
+        self._fail_count += 1
+        resp = getattr(e, "response", None)
+        status = getattr(resp, "status_code", None)
+        key_env = "GROQ_API_KEY" if self.cfg.brain_provider == "groq" else "ANTHROPIC_API_KEY"
+        if status in (401, 403):
+            log.error("LLM auth rejected (HTTP %s) -- disabling live brain, using canned lines "
+                      "for the rest of the session. Check %s.", status, key_env)
+            self.provider = "none"
+        elif self._fail_count >= 3:
+            log.error("LLM failed %d turns in a row (last: %s) -- disabling live brain, using "
+                      "canned lines. Check connectivity / %s.", self._fail_count, e, key_env)
+            self.provider = "none"
+        else:
+            log.warning("LLM call failed (%s) [%d/3]; canned fallback this turn.",
+                        e, self._fail_count)
 
     # ------------------------------------------------------------------ internals
     @staticmethod

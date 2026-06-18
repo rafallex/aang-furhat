@@ -16,9 +16,12 @@ Manual overrides (all optional — the LLM tag drives the Avatar State on its ow
   quit  -> "goodbye Aang", "shut down"
 """
 
+import sys
 import time
 import re
+import signal
 import random
+import logging
 import threading
 
 from aang.config import Config
@@ -35,6 +38,31 @@ try:
     import msvcrt  # Windows console key reader
 except ImportError:
     msvcrt = None
+
+log = logging.getLogger("aang.app")
+
+
+def _setup_logging():
+    """Send diagnostics to a timestamped aang.log (INFO+, with tracebacks) and surface
+    warnings/errors on the console (stderr). The live transcript stays on plain stdout
+    prints so the operator's view is clean; the log file is there when a demo misbehaves."""
+    root = logging.getLogger("aang")
+    if root.handlers:
+        return
+    root.setLevel(logging.INFO)
+    root.propagate = False
+    try:
+        fh = logging.FileHandler("aang.log", encoding="utf-8")
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s",
+                                          "%H:%M:%S"))
+        root.addHandler(fh)
+    except Exception:
+        pass  # a missing/locked log file must never stop the show
+    ch = logging.StreamHandler(sys.stderr)
+    ch.setLevel(logging.WARNING)
+    ch.setFormatter(logging.Formatter("[%(levelname)s] %(name)s: %(message)s"))
+    root.addHandler(ch)
 
 
 class Keyboard(threading.Thread):
@@ -83,13 +111,22 @@ def _echo_of(heard, said):
 def _first_sentence(text):
     """Keep an Avatar reply to ONE punchy line. The model sometimes tags [AVATAR], lands the
     rage line, then slips back into a calm/worried Aang sentence in the same reply -- which
-    makes him 'speak a full second time'. Cut at the first sentence-ending . ! or ?."""
+    makes him 'speak a full second time'. Cut at the first sentence-ending . ! or ? -- but
+    ONLY when there is clearly a second sentence to drop and the first is long enough to be
+    the real line, so an early period (e.g. a one-word opener) isn't lopped off."""
     t = text.strip()
     m = re.search(r"[.!?](\s|$)", t)
-    return t[:m.start() + 1] if m else t
+    if not m:
+        return t
+    first = t[:m.start() + 1]
+    rest = t[m.end():].strip()
+    if not rest or len(first.split()) < 4:
+        return t
+    return first
 
 
 def main():
+    _setup_logging()
     cfg = Config()
     print("=" * 60)
     print("  AANG on Furhat")
@@ -97,7 +134,15 @@ def main():
 
     f = FurhatRT(cfg.host, cfg.port, cfg.auth_key)
     print(f"Connecting to {cfg.host}:{cfg.port} ...")
-    resp = f.connect()
+    try:
+        resp = f.connect()
+    except Exception as e:
+        log.error("startup connect failed: %s", e, exc_info=True)
+        print(f"\n  Cannot reach Furhat at {cfg.host}:{cfg.port} "
+              f"({type(e).__name__}: {e}).\n"
+              f"  Check the robot is on, on the same LAN, and FURHAT_HOST is correct, "
+              f"then run again.")
+        sys.exit(1)
     print(f"  connected (auth scope: {resp.get('scope')})")
 
     brain = Brain(cfg)
@@ -127,6 +172,7 @@ def main():
             fx_ok = True
             print(f"Avatar voice FX (deep voice): {fx_url}")
         except Exception as e:
+            log.warning("Avatar voice FX server failed to start: %s", e)
             print(f"Avatar voice FX disabled ({e}) - using native deep voice")
 
     _fx_n = [int(time.time())]  # seed cache-bust with time so the robot never replays a stale rage.wav from a previous run
@@ -144,6 +190,7 @@ def main():
                 f.speak_audio_and_wait(voicefx.url_for("rage", _fx_n[0]), text=text, lipsync=True)
                 return
             except Exception as e:
+                log.warning("avatar voice FX render/play failed: %s", e, exc_info=True)
                 print(f"  [fx] failed ({e}); using native voice")
         f.stop_speaking()
         time.sleep(0.2)
@@ -175,6 +222,20 @@ def main():
     kb = Keyboard(cfg)
     kb.start()
 
+    # Clean shutdown on a kill signal (terminal/IDE stop), not just Ctrl-C: set the quit
+    # flag so the loop falls through to the finally block that resets the robot. (SIGINT is
+    # left alone so Ctrl-C keeps raising KeyboardInterrupt exactly as before.)
+    def _request_quit(signum, frame):
+        log.warning("signal %s received - shutting down cleanly", signum)
+        kb.quit.set()
+    for _sig in ("SIGTERM", "SIGBREAK"):
+        _s = getattr(signal, _sig, None)
+        if _s is not None:
+            try:
+                signal.signal(_s, _request_quit)
+            except (ValueError, OSError, RuntimeError):
+                pass
+
     f.gesture("BigSmile")
     last_said = random.choice(OPENING_LINES)
     f.say_and_wait(last_said)
@@ -186,6 +247,7 @@ def main():
             # killing the app mid-demo. (The robot's Realtime API drops intermittently.)
             if not f.alive:
                 print("  (connection dropped - reconnecting...)")
+                log.warning("connection dropped - reconnecting")
                 deadline = time.time() + 120
                 attempt = 0
                 reconnected = False
@@ -193,104 +255,127 @@ def main():
                     attempt += 1
                     try:
                         f.reconnect()
-                        avatar.active = False     # robot is back to a clean state
+                        avatar.force_stop()       # tear down a stray glow thread; robot is clean
                         dress()
+                        if not f.alive:
+                            # A send during dress() failed on a still-flaky socket: don't report
+                            # a false "reconnected" -- count it as a failed attempt and retry.
+                            raise RuntimeError("socket dropped during re-dress")
                         print(f"  reconnected (attempt {attempt}).")
+                        log.info("reconnected (attempt %d)", attempt)
                         reconnected = True
                         break
                     except Exception as e:
+                        log.warning("reconnect attempt %d failed: %s", attempt, e)
                         print(f"  reconnect attempt {attempt} failed ({e}); retrying in 3s...")
                         time.sleep(3)
                 if not reconnected:
                     print("  could not reconnect within 2 min; giving up.")
+                    log.error("could not reconnect within 2 min; giving up")
                     break
                 continue
 
-            # Hotkey takes priority.
-            if kb.toggle_avatar.is_set():
-                kb.toggle_avatar.clear()
-                if avatar.active:
+            # One stray exception in a single turn must NOT end the whole demo: log it (with a
+            # traceback, to aang.log) and carry on with the next turn. A dropped socket is
+            # handled above -- a plain `continue` here re-checks f.alive at the top next pass.
+            try:
+                # Hotkey takes priority.
+                if kb.toggle_avatar.is_set():
+                    kb.toggle_avatar.clear()
+                    if avatar.active:
+                        avatar.exit()
+                    else:
+                        avatar.enter(brain, speak=False)
+                        last_said = random.choice(ENTER_LINES)
+                        say_avatar(last_said)
+                    continue
+
+                # The Avatar State burns out on its own — it never stays forever.
+                if avatar.active and (time.time() - avatar.entered_at) > cfg.avatar_timeout:
+                    print("  (Avatar State burns out -> returning to Aang)")
                     avatar.exit()
+                    continue
+
+                # Push-to-talk: keep the mic CLOSED until you press the talk key, so the robot
+                # can't hear itself (the open mic + shared head was the #1 demo gremlin). The
+                # mic opens for exactly one utterance, then closes again while Aang thinks and
+                # speaks. Open-mic mode (AANG_PTT=0) keeps the old always-listening loop.
+                if cfg.push_to_talk and not kb.talk.is_set():
+                    time.sleep(0.05)
+                    continue
+                kb.talk.clear()
+
+                # Self-heal the face: re-assert the intended face (and the furious stare) so a
+                # face-swap dropped over the network auto-corrects and the glare never relaxes.
+                avatar.assert_look()
+
+                if not cfg.push_to_talk:
+                    # Open mic only: let Aang's voice + room echo clear before the mic reopens.
+                    time.sleep(0.7)
                 else:
+                    print("  (listening — speak now)")
+
+                text = f.listen(
+                    timeout=12.0,
+                    tick=lambda: kb.toggle_avatar.is_set() or kb.quit.is_set()
+                    or (avatar.active and (time.time() - avatar.entered_at) > cfg.avatar_timeout),
+                )
+
+                if kb.quit.is_set():
+                    break
+                if kb.toggle_avatar.is_set():
+                    # [a] pressed during/after listening aborts the listen to force the Avatar
+                    # toggle (handled at the top of the loop). Don't drop a heard line silently.
+                    if text:
+                        print(f"  (avatar toggle pressed — discarded heard text: {text})")
+                    continue
+                if not text:
+                    continue
+
+                # Drop the robot hearing its own last line back (mic + speaker share the head).
+                if _echo_of(text, last_said):
+                    print(f"  (ignored self-echo: {text})")
+                    continue
+
+                print(f"  USER: {text}")
+
+                if matches(text, QUIT_PHRASES):
+                    break
+                # Manual overrides (explicit phrases) still work.
+                if not avatar.active and matches(text, TRIGGER_PHRASES):
                     avatar.enter(brain, speak=False)
                     last_said = random.choice(ENTER_LINES)
                     say_avatar(last_said)
+                    continue
+                if avatar.active and matches(text, DEACTIVATE_PHRASES):
+                    avatar.exit()
+                    continue
+
+                # Otherwise the LLM directs: each turn it decides whether the moment is
+                # dire enough to surge into the Avatar State (or calm enough to leave it).
+                if not avatar.active:
+                    f.gesture(random.choice(THINKING_GESTURES))
+                want_avatar, reply = brain.respond(text, avatar=avatar.active)
+                if want_avatar:
+                    reply = _first_sentence(reply)   # Avatar speaks ONE line -- no slipping back to calm Aang mid-reply
+                print(f"  AANG{' [AVATAR]' if want_avatar else ''}: {reply}")
+
+                if want_avatar and not avatar.active:
+                    avatar.enter(brain, speak=False)   # surge into the Avatar State
+                elif (not want_avatar) and avatar.active:
+                    avatar.exit(speak=False)           # recede to young Aang
+
+                # rage lines speak in the single deep Avatar voice; everything else, normal voice
+                last_said = reply
+                (say_avatar if want_avatar else f.say_and_wait)(reply)
+
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                log.exception("turn failed: %s", e)
+                print(f"  (turn error: {e} — continuing)")
+                time.sleep(0.3)
                 continue
-
-            # The Avatar State burns out on its own — it never stays forever.
-            if avatar.active and (time.time() - avatar.entered_at) > cfg.avatar_timeout:
-                print("  (Avatar State burns out -> returning to Aang)")
-                avatar.exit()
-                continue
-
-            # Push-to-talk: keep the mic CLOSED until you press the talk key, so the robot
-            # can't hear itself (the open mic + shared head was the #1 demo gremlin). The
-            # mic opens for exactly one utterance, then closes again while Aang thinks and
-            # speaks. Open-mic mode (AANG_PTT=0) keeps the old always-listening loop.
-            if cfg.push_to_talk and not kb.talk.is_set():
-                time.sleep(0.05)
-                continue
-            kb.talk.clear()
-
-            # Self-heal the face: re-assert the intended face (and the furious stare) so a
-            # face-swap dropped over the network auto-corrects and the glare never relaxes.
-            avatar.assert_look()
-
-            if not cfg.push_to_talk:
-                # Open mic only: let Aang's voice + room echo clear before the mic reopens.
-                time.sleep(0.7)
-            else:
-                print("  (listening — speak now)")
-
-            text = f.listen(
-                timeout=12.0,
-                tick=lambda: kb.toggle_avatar.is_set() or kb.quit.is_set()
-                or (avatar.active and (time.time() - avatar.entered_at) > cfg.avatar_timeout),
-            )
-
-            if kb.quit.is_set():
-                break
-            if kb.toggle_avatar.is_set():
-                continue  # handled at top of loop
-            if not text:
-                continue
-
-            # Drop the robot hearing its own last line back (mic + speaker share the head).
-            if _echo_of(text, last_said):
-                print(f"  (ignored self-echo: {text})")
-                continue
-
-            print(f"  USER: {text}")
-
-            if matches(text, QUIT_PHRASES):
-                break
-            # Manual overrides (explicit phrases) still work.
-            if not avatar.active and matches(text, TRIGGER_PHRASES):
-                avatar.enter(brain, speak=False)
-                last_said = random.choice(ENTER_LINES)
-                say_avatar(last_said)
-                continue
-            if avatar.active and matches(text, DEACTIVATE_PHRASES):
-                avatar.exit()
-                continue
-
-            # Otherwise the LLM directs: each turn it decides whether the moment is
-            # dire enough to surge into the Avatar State (or calm enough to leave it).
-            if not avatar.active:
-                f.gesture(random.choice(THINKING_GESTURES))
-            want_avatar, reply = brain.respond(text, avatar=avatar.active)
-            if want_avatar:
-                reply = _first_sentence(reply)   # Avatar speaks ONE line -- no slipping back to calm Aang mid-reply
-            print(f"  AANG{' [AVATAR]' if want_avatar else ''}: {reply}")
-
-            if want_avatar and not avatar.active:
-                avatar.enter(brain, speak=False)   # surge into the Avatar State
-            elif (not want_avatar) and avatar.active:
-                avatar.exit(speak=False)           # recede to young Aang
-
-            # rage lines speak in the single deep Avatar voice; everything else, normal voice
-            last_said = reply
-            (say_avatar if want_avatar else f.say_and_wait)(reply)
 
     except KeyboardInterrupt:
         pass
@@ -304,11 +389,15 @@ def main():
             f.face_config(blinking=True, microexpressions=True)
             f.led("#000000")
         except Exception:
-            pass
+            log.debug("cleanup/restore failed", exc_info=True)
         kb.quit.set()
         f.close()
         if sfx:
             sfx.stop()
+        try:
+            voicefx.shutdown()   # stop the deep-voice HTTP server (no-op if never started)
+        except Exception:
+            pass
         print("Goodbye. May the spirits watch over you.")
 
 

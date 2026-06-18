@@ -12,7 +12,7 @@ Recipe:
   >>> RESTART THE ROBOT <<<                  # loads the new skin texture (arrow)
   python tools/import_aang_face.py select    # select again after boot
 
-Env: FURHAT_HOST, AANG_STUDIO_PASSWORD (default "admin"), AANG_CHAR_NAME (default "Aang2").
+Env: FURHAT_HOST, AANG_STUDIO_PASSWORD (default "admin"), AANG_CHAR_NAME (default "Aang4").
 """
 
 import os
