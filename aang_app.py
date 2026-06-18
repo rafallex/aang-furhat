@@ -5,7 +5,7 @@ face to a 12-year-old Air Nomad, who can unlock the AVATAR STATE either by a
 spoken trigger phrase or a keyboard hotkey.
 
 Run:   python aang_app.py
-Keys:  [a] toggle the Avatar State    [q] quit
+Keys:  [space] talk (push-to-talk)   [a] Avatar State   [q] quit
 
 Speech triggers:
   auto  -> the LLM surges into the Avatar State on its own when stakes get dire
@@ -15,6 +15,7 @@ Speech triggers:
 """
 
 import time
+import re
 import random
 import threading
 
@@ -26,7 +27,6 @@ from aang.persona import (
     OPENING_LINES, ENTER_LINES, TRIGGER_PHRASES, DEACTIVATE_PHRASES, QUIT_PHRASES,
     THINKING_GESTURES,
 )
-from aang import avatar_voice_fx as voicefx
 
 try:
     import msvcrt  # Windows console key reader
@@ -41,6 +41,7 @@ class Keyboard(threading.Thread):
         super().__init__(daemon=True)
         self.cfg = cfg
         self.toggle_avatar = threading.Event()
+        self.talk = threading.Event()
         self.quit = threading.Event()
 
     def run(self):
@@ -54,6 +55,8 @@ class Keyboard(threading.Thread):
                     ch = ""
                 if ch == self.cfg.hotkey_avatar:
                     self.toggle_avatar.set()
+                elif ch == self.cfg.hotkey_talk:
+                    self.talk.set()
                 elif ch == self.cfg.hotkey_quit:
                     self.quit.set()
             time.sleep(0.04)
@@ -62,6 +65,25 @@ class Keyboard(threading.Thread):
 def matches(text, phrases):
     t = text.lower()
     return any(p in t for p in phrases)
+
+
+def _echo_of(heard, said):
+    """True if `heard` is really the robot hearing its own last line back
+    (the mic and speaker share the head). Compares word overlap."""
+    hw = set(re.findall(r"[a-z']+", heard.lower()))
+    sw = set(re.findall(r"[a-z']+", said.lower()))
+    if not hw or not sw:
+        return False
+    return len(hw & sw) / len(hw) >= 0.6
+
+
+def _first_sentence(text):
+    """Keep an Avatar reply to ONE punchy line. The model sometimes tags [AVATAR], lands the
+    rage line, then slips back into a calm/worried Aang sentence in the same reply -- which
+    makes him 'speak a full second time'. Cut at the first sentence-ending . ! or ?."""
+    t = text.strip()
+    m = re.search(r"[.!?](\s|$)", t)
+    return t[:m.start() + 1] if m else t
 
 
 def main():
@@ -90,32 +112,23 @@ def main():
 
     avatar = AvatarState(f, cfg, sfx)
 
-    # Avatar-State chorus voice: Christopher TTS layered with detuned copies + reverb,
-    # rendered on the fly and served over HTTP for request.speak.audio.
-    fx_ok = False
-    try:
-        fx_url = voicefx.ensure_server()
-        fx_ok = True
-        print(f"Avatar voice FX: {fx_url}")
-    except Exception as e:
-        print(f"Avatar voice FX disabled ({e}) - using plain TTS avatar voice")
-
-    _fx_n = [0]
-
+    # Avatar-State voice = the robot's OWN deep voice (Christopher, switched in by
+    # AvatarState.enter()), spoken via NATIVE TTS. We do NOT render a custom reverb track:
+    # this robot's request.speak.audio couples file playback to the `text` field -- it won't
+    # play a file without ALSO speaking the text aloud on top (the doubled "second voice"),
+    # and an empty text plays nothing. So a rendered (reverb) track always doubles here;
+    # native TTS is the only single, instant, reliable avatar voice.
     def say_avatar(text):
-        """Speak as the layered Avatar chorus; fall back to the TTS avatar voice."""
-        if fx_ok:
-            try:
-                voicefx.render(text, "rage")
-                _fx_n[0] += 1
-                f.speak_audio_and_wait(voicefx.url_for("rage", _fx_n[0]), text=text, lipsync=True)
-                return
-            except Exception as e:
-                print(f"  [fx] render failed ({e}); using TTS voice")
+        # Cut the 3.4s surge wind + clear its speak.end first, or say_and_wait latches onto
+        # the WIND's end and the line clips mid-sentence.
+        f.stop_speaking()
+        time.sleep(0.2)
+        f.drain()
         f.say_and_wait(text)
 
     # --- dress the robot as Aang (also re-run after a reconnect) ---
     def dress():
+        f.listen_stop()  # clear any dangling listen session (e.g. left by a killed instance) -> stops "already listening" + early self-hearing
         f.system_config(volume=cfg.volume)
         f.voice_config(voice_id=cfg.voice_normal)
         f.face_config(face_id=cfg.face_id, blinking=True, microexpressions=True, head_sway=False)
@@ -127,14 +140,20 @@ def main():
     dress()
     print(f"Face: {cfg.face_id}  |  Voice: {cfg.voice_normal}")
     print("-" * 60)
-    print(f"Controls:  [{cfg.hotkey_avatar}] Avatar State   [{cfg.hotkey_quit}] quit")
+    talk_label = "space" if cfg.hotkey_talk == " " else cfg.hotkey_talk
+    print(f"Mode: {'push-to-talk' if cfg.push_to_talk else 'open-mic'}")
+    if cfg.push_to_talk:
+        print(f"Controls:  [{talk_label}] talk   [{cfg.hotkey_avatar}] Avatar State   [{cfg.hotkey_quit}] quit")
+    else:
+        print(f"Controls:  [{cfg.hotkey_avatar}] Avatar State   [{cfg.hotkey_quit}] quit")
     print("-" * 60)
 
     kb = Keyboard(cfg)
     kb.start()
 
     f.gesture("BigSmile")
-    f.say_and_wait(random.choice(OPENING_LINES))
+    last_said = random.choice(OPENING_LINES)
+    f.say_and_wait(last_said)
 
     try:
         while not kb.quit.is_set():
@@ -158,7 +177,8 @@ def main():
                     avatar.exit()
                 else:
                     avatar.enter(brain, speak=False)
-                    say_avatar(random.choice(ENTER_LINES))
+                    last_said = random.choice(ENTER_LINES)
+                    say_avatar(last_said)
                 continue
 
             # The Avatar State burns out on its own — it never stays forever.
@@ -166,6 +186,25 @@ def main():
                 print("  (Avatar State burns out -> returning to Aang)")
                 avatar.exit()
                 continue
+
+            # Push-to-talk: keep the mic CLOSED until you press the talk key, so the robot
+            # can't hear itself (the open mic + shared head was the #1 demo gremlin). The
+            # mic opens for exactly one utterance, then closes again while Aang thinks and
+            # speaks. Open-mic mode (AANG_PTT=0) keeps the old always-listening loop.
+            if cfg.push_to_talk and not kb.talk.is_set():
+                time.sleep(0.05)
+                continue
+            kb.talk.clear()
+
+            # Self-heal the face: re-assert the intended face (and the furious stare) so a
+            # face-swap dropped over the network auto-corrects and the glare never relaxes.
+            avatar.assert_look()
+
+            if not cfg.push_to_talk:
+                # Open mic only: let Aang's voice + room echo clear before the mic reopens.
+                time.sleep(0.7)
+            else:
+                print("  (listening — speak now)")
 
             text = f.listen(
                 timeout=12.0,
@@ -180,6 +219,11 @@ def main():
             if not text:
                 continue
 
+            # Drop the robot hearing its own last line back (mic + speaker share the head).
+            if _echo_of(text, last_said):
+                print(f"  (ignored self-echo: {text})")
+                continue
+
             print(f"  USER: {text}")
 
             if matches(text, QUIT_PHRASES):
@@ -187,7 +231,8 @@ def main():
             # Manual overrides (explicit phrases) still work.
             if not avatar.active and matches(text, TRIGGER_PHRASES):
                 avatar.enter(brain, speak=False)
-                say_avatar(random.choice(ENTER_LINES))
+                last_said = random.choice(ENTER_LINES)
+                say_avatar(last_said)
                 continue
             if avatar.active and matches(text, DEACTIVATE_PHRASES):
                 avatar.exit()
@@ -198,6 +243,8 @@ def main():
             if not avatar.active:
                 f.gesture(random.choice(THINKING_GESTURES))
             want_avatar, reply = brain.respond(text, avatar=avatar.active)
+            if want_avatar:
+                reply = _first_sentence(reply)   # Avatar speaks ONE line -- no slipping back to calm Aang mid-reply
             print(f"  AANG{' [AVATAR]' if want_avatar else ''}: {reply}")
 
             if want_avatar and not avatar.active:
@@ -206,6 +253,7 @@ def main():
                 avatar.exit(speak=False)           # recede to young Aang
 
             # rage lines speak as the layered Avatar chorus; everything else, normal voice
+            last_said = reply
             (say_avatar if want_avatar else f.say_and_wait)(reply)
 
     except KeyboardInterrupt:

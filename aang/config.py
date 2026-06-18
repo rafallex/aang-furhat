@@ -40,6 +40,12 @@ class Config:
     # ---- Controls (console hotkeys) ----
     hotkey_avatar: str = _env("AANG_HOTKEY_AVATAR", "a").lower()
     hotkey_quit: str = _env("AANG_HOTKEY_QUIT", "q").lower()
+    hotkey_talk: str = _env("AANG_HOTKEY_TALK", " ")   # optional push-to-talk key (default: space)
+
+    # Normal hands-free conversation is the DEFAULT (open mic). Push-to-talk is only an
+    # optional fallback for a noisy room / if robot-side echo cancellation isn't enough:
+    # set AANG_PTT=1 to enable it.
+    push_to_talk: bool = _env("AANG_PTT", "0") == "1"
 
     # ---- Avatar State ----
     # The Avatar State burns out on its own after this many seconds (never stays forever).
