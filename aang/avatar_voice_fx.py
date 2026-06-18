@@ -123,14 +123,12 @@ def render(text, name="avatar"):
     asyncio.run(_tts(text, mp3))
     subprocess.run([_FFMPEG, "-y", "-i", mp3, "-ac", "1", "-ar", "24000", raw],
                    check=True, capture_output=True)
-    base = _read_wav(raw)
+    main = _read_wav(raw)   # the deep voice -- depth comes from the TTS pitch (see _tts)
 
-    # Depth comes from the TTS engine's own pitch (see _tts: pitch="-30Hz"), NOT a pydub
-    # pitch-shift: the pydub time-stretch that kept duration crossfaded chunks, and THAT was
-    # the "prolonged echo" -- not the reverb. So take the deep TTS voice as-is and add ONE
-    # faint short echo for a hint of space. Dial by ear: raise/lower the -26 dB, shift the 75 ms.
-    voice = base
-    mix = _reverb(voice, taps=((75, -26),)).normalize(headroom=3.0)
+    # JUST the deep voice -- NO reverb. A faint reverb sounded fine on a PC but muddy/bad on the
+    # robot's own speaker (and any echo on the robot reads as doubling). The deep TTS pitch IS
+    # the whole effect. Single, clean, dry.
+    mix = main.normalize(headroom=3.0)
     _write_wav(mix, out)
     return out
 
