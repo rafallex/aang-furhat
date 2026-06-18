@@ -73,6 +73,7 @@ class SFX:
         self.ip = cfg.sfx_host or detect_lan_ip()
         self.port = cfg.sfx_port
         self.httpd = None
+        self._thread = None
 
     def url(self):
         return f"http://{self.ip}:{self.port}/{self.filename}"
@@ -90,12 +91,18 @@ class SFX:
                 pass  # keep the console clean
 
         self.httpd = ThreadingHTTPServer(("0.0.0.0", self.port), Handler)
-        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self._thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self._thread.start()
         return self.url()
 
     def stop(self):
         if self.httpd:
             try:
                 self.httpd.shutdown()
+                self.httpd.server_close()   # actually release the listening socket
             except Exception:
                 pass
+            if self._thread:
+                self._thread.join(timeout=1.0)
+            self.httpd = None
+            self._thread = None

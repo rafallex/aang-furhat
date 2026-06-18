@@ -15,9 +15,12 @@ FX); enter(speak=True) is a legacy/standalone path.
 import math
 import time
 import random
+import logging
 import threading
 
 from .persona import ENTER_LINES
+
+log = logging.getLogger(__name__)
 
 # ----- palette -----
 CALM_BLUE = "#2A6BC0"     # airbender calm (idle)
@@ -93,7 +96,7 @@ class AvatarState:
             try:
                 f.speak_audio(self.sfx.url(), text="(wind)", lipsync=False, abort=True)
             except Exception:
-                pass
+                log.debug("wind sfx failed", exc_info=True)
 
         # 5. Slow rise of the head, eyes to the sky.
         f.headpose(pitch=LOOK_UP_PITCH, yaw=0.0, roll=0.0, speed="xslow")
@@ -147,6 +150,19 @@ class AvatarState:
             f.led(scale_hex(GLOW_CYAN, k / 10.0))
             time.sleep(0.05)
         f.led(CALM_BLUE)
+
+    # ------------------------------------------------------------------ force stop
+    def force_stop(self):
+        """Tear down just the breathing-glow thread, without the full exit() choreography.
+        Used on reconnect: the socket is being rebuilt and the following dress() resets the
+        LED/voice anyway, so restoring them here would only fight it -- but the glow thread
+        MUST be stopped or it keeps firing ~16 LED sends/sec into the new socket and flickers
+        against dress()'s calm blue."""
+        self.active = False
+        self._glow_stop.set()
+        if self._glow_thread:
+            self._glow_thread.join(timeout=1.0)
+            self._glow_thread = None
 
     # ------------------------------------------------------------------ self-heal
     def assert_look(self):

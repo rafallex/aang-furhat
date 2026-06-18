@@ -40,6 +40,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 # ---- tiny HTTP server so the robot can fetch the rendered WAVs (request.speak.audio) ----
 _server = None
 _base_url = None
+_thread = None
 
 
 class _QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -55,16 +56,40 @@ def _lan_ip():
         s.close()
 
 
-def ensure_server(port=8079):
-    """Start (once) an HTTP server serving OUT_DIR; return its base URL."""
-    global _server, _base_url
+def ensure_server(port=None):
+    """Start (once) an HTTP server serving OUT_DIR; return its base URL.
+
+    Port precedence: explicit arg > AANG_FX_PORT env var > 8079 default. The robot fetches
+    the rendered deep-voice WAVs from this port, so it must be reachable on the LAN / through
+    the firewall -- this is a SEPARATE port from the wind-SFX one (AANG_SFX_PORT)."""
+    global _server, _base_url, _thread
+    if port is None:
+        port = int(os.environ.get("AANG_FX_PORT", "8079"))
     if _server is None:
         handler = functools.partial(_QuietHandler, directory=OUT_DIR)
         _server = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
         _server.daemon_threads = True
-        threading.Thread(target=_server.serve_forever, daemon=True).start()
+        _thread = threading.Thread(target=_server.serve_forever, daemon=True)
+        _thread.start()
         _base_url = f"http://{_lan_ip()}:{port}"
     return _base_url
+
+
+def shutdown():
+    """Stop the FX HTTP server (call on app exit so it doesn't linger). No-op if never
+    started, so it's safe to call unconditionally in a finally block."""
+    global _server, _base_url, _thread
+    if _server is not None:
+        try:
+            _server.shutdown()
+            _server.server_close()
+        except Exception:
+            pass
+        if _thread is not None:
+            _thread.join(timeout=1.0)
+        _server = None
+        _base_url = None
+        _thread = None
 
 
 def url_for(name="avatar", bust=0):

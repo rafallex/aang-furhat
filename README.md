@@ -39,11 +39,17 @@ the Realtime API.
 - **Stop any running Furhat AI Creator skill first** — it fights the Realtime-API app
   (both want the robot's voice/listen pipeline). Stop it before launching the demo.
 - **Run on Ethernet.** WiFi was unstable in testing, and the robot must reach this PC
-  over the LAN to fetch the rendered voice and wind-SFX WAVs over HTTP.
+  over the LAN to fetch the rendered voice and wind-SFX WAVs over HTTP. Two local HTTP
+  ports must be reachable from the robot: **8079** (deep-voice WAVs, `AANG_FX_PORT`) and
+  **8077** (wind SFX, `AANG_SFX_PORT`) — open both if a firewall is in the way.
 
 ## Setup
 
 ```powershell
+# (optional but recommended) create the conda env the Run step activates
+conda create -n furhat python=3.11 -y
+conda activate furhat
+
 pip install -r requirements.txt
 
 # point at the robot (its IP on the LAN)
@@ -100,6 +106,8 @@ only optional **manual overrides**:
 | `tools/import_aang_face.py` | Installs the face pack on the robot (`deploy` / `select`). |
 | `tools/probe.py` | Lists the robot's installed faces and voices. |
 | `tools/smoke_test.py` | One-shot hardware check of every primitive Aang uses. |
+| `tools/avatar_demo.py` | One-shot Avatar-State showpiece (no mic/conversation) — for filming the transformation. |
+| `tools/face_console.py` | Interactive console to drive the face / LED / head params live (diagnostics + tuning). |
 
 ## How to tweak
 
@@ -111,7 +119,9 @@ Everything is an env var (see `.env.example`) — no code edits needed:
 - **Different brain?** `AANG_BRAIN=anthropic` (+ `ANTHROPIC_API_KEY`), or `AANG_MODEL=...`.
 - **Deep Avatar voice on/off?** `AANG_AVATAR_FX=1` (default) renders the deep voice from
   this PC; `AANG_AVATAR_FX=0` uses the robot's native deep voice (`AANG_VOICE_AVATAR`).
-  Pick the edge-tts voice with `AANG_FX_VOICE` (default `en-US-ChristopherNeural`).
+  Pick the edge-tts voice with `AANG_FX_VOICE` (default `en-US-ChristopherNeural`). The
+  rendered WAVs are served on `AANG_FX_PORT` (default `8079`, must be LAN-reachable) and
+  written to `AANG_FX_DIR` (default `%TEMP%\aang_fx`).
 - **Push-to-talk instead of open mic?** `AANG_PTT=1` enables push-to-talk (hold the
   space key); the default `AANG_PTT=0` is hands-free open mic.
 - **Avatar State too long / too short?** `AANG_AVATAR_TIMEOUT` (seconds; default 25).
@@ -147,6 +157,10 @@ python tools/import_aang_face.py deploy     # importCharacter (live) + /assetpac
 #  >>> RESTART THE ROBOT <<<                 # FaceCore loads asset-pack textures on boot
 python tools/import_aang_face.py select     # face.config -> "adult - Aang4"
 ```
+
+> If your robot's Studio password isn't the factory default, set `AANG_STUDIO_PASSWORD`
+> before `deploy` (the importer logs in over the Studio WebSocket). `AANG_CHAR_NAME`
+> (default `Aang4`) sets the character name the pack installs/selects as.
 
 Tweaking the arrow (colour/size/position) or skin **darkness** means: edit the constants
 atop `face/build_aang_face.py`, rebuild, redeploy, **restart**, select. (Restarts are the
