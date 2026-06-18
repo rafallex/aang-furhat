@@ -127,7 +127,7 @@ def main():
         except Exception as e:
             print(f"Avatar voice FX disabled ({e}) - using native deep voice")
 
-    _fx_n = [0]
+    _fx_n = [int(time.time())]  # seed cache-bust with time so the robot never replays a stale rage.wav from a previous run
 
     def say_avatar(text):
         # Cut the 3.4s surge wind + clear its speak.end first, or *_and_wait latches onto the

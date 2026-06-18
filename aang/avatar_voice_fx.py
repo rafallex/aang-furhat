@@ -125,10 +125,10 @@ def render(text, name="avatar"):
                    check=True, capture_output=True)
     main = _read_wav(raw)   # the deep voice -- depth comes from the TTS pitch (see _tts)
 
-    # Deep voice + a FAINT hint of room: two short, quiet reflections on the SAME voice, just
-    # enough space to feel a little bigger. NOT an echo-repeat and NOT a layered "second wave"
-    # -- those read as a doubled voice, which we don't want. Single, clean, dramatic.
-    mix = _reverb(main, taps=((55, -23), (110, -30))).normalize(headroom=3.0)
+    # JUST the deep voice -- NO reverb. A faint reverb sounded fine on a PC but muddy/bad on the
+    # robot's own speaker (and any echo on the robot reads as doubling). The deep TTS pitch IS
+    # the whole effect. Single, clean, dry.
+    mix = main.normalize(headroom=3.0)
     _write_wav(mix, out)
     return out
 
