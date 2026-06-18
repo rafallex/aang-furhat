@@ -27,6 +27,7 @@ from aang.persona import (
     OPENING_LINES, ENTER_LINES, TRIGGER_PHRASES, DEACTIVATE_PHRASES, QUIT_PHRASES,
     THINKING_GESTURES,
 )
+from aang import avatar_voice_fx as voicefx
 
 try:
     import msvcrt  # Windows console key reader
@@ -112,15 +113,36 @@ def main():
 
     avatar = AvatarState(f, cfg, sfx)
 
-    # Avatar-State voice = the robot's OWN deep voice (Christopher, switched in by
-    # AvatarState.enter()), spoken via NATIVE TTS. We do NOT render a custom reverb track:
-    # this robot's request.speak.audio couples file playback to the `text` field -- it won't
-    # play a file without ALSO speaking the text aloud on top (the doubled "second voice"),
-    # and an empty text plays nothing. So a rendered (reverb) track always doubles here;
-    # native TTS is the only single, instant, reliable avatar voice.
+    # Avatar-State voice. Default: render a deep "second wave" FX file (avatar_voice_fx.render
+    # -- the main deep voice + a much deeper ghost that rolls back in AFTER the line) and play
+    # it via request.speak.audio (the FILE is the voice; text=<line> is lip-sync only). Needs
+    # the robot to fetch the file from this PC (works on Ethernet). Falls back to the robot's
+    # plain native deep voice if rendering/playback fails or AANG_AVATAR_FX=0.
+    fx_ok = False
+    if cfg.avatar_voice_fx:
+        try:
+            fx_url = voicefx.ensure_server()
+            fx_ok = True
+            print(f"Avatar voice FX (second wave): {fx_url}")
+        except Exception as e:
+            print(f"Avatar voice FX disabled ({e}) - using native deep voice")
+
+    _fx_n = [0]
+
     def say_avatar(text):
-        # Cut the 3.4s surge wind + clear its speak.end first, or say_and_wait latches onto
-        # the WIND's end and the line clips mid-sentence.
+        # Cut the 3.4s surge wind + clear its speak.end first, or *_and_wait latches onto the
+        # WIND's end and the line clips mid-sentence.
+        if fx_ok:
+            try:
+                voicefx.render(text, "rage")
+                _fx_n[0] += 1
+                f.stop_speaking()
+                time.sleep(0.2)
+                f.drain()
+                f.speak_audio_and_wait(voicefx.url_for("rage", _fx_n[0]), text=text, lipsync=True)
+                return
+            except Exception as e:
+                print(f"  [fx] failed ({e}); using native voice")
         f.stop_speaking()
         time.sleep(0.2)
         f.drain()
