@@ -179,16 +179,28 @@ def main():
 
     try:
         while not kb.quit.is_set():
-            # Reconnect if the WebSocket dropped (robot blip / idle close).
+            # Reconnect if the WebSocket dropped (robot blip / idle close / reboot). Retry for
+            # up to ~2 minutes so a transient drop or a full robot reboot self-heals instead of
+            # killing the app mid-demo. (The robot's Realtime API drops intermittently.)
             if not f.alive:
                 print("  (connection dropped - reconnecting...)")
-                try:
-                    f.reconnect()
-                    avatar.active = False     # robot is back to a clean state
-                    dress()
-                    print("  reconnected.")
-                except Exception as e:
-                    print(f"  reconnect failed ({e}); giving up.")
+                deadline = time.time() + 120
+                attempt = 0
+                reconnected = False
+                while time.time() < deadline and not kb.quit.is_set():
+                    attempt += 1
+                    try:
+                        f.reconnect()
+                        avatar.active = False     # robot is back to a clean state
+                        dress()
+                        print(f"  reconnected (attempt {attempt}).")
+                        reconnected = True
+                        break
+                    except Exception as e:
+                        print(f"  reconnect attempt {attempt} failed ({e}); retrying in 3s...")
+                        time.sleep(3)
+                if not reconnected:
+                    print("  could not reconnect within 2 min; giving up.")
                     break
                 continue
 
