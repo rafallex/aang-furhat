@@ -1,89 +1,39 @@
-"""Install / update the custom Aang face on the robot. TWO mechanisms are needed:
+"""Install / update the custom Aang face on the robot.
 
-  A) importCharacter (Studio WS, authenticated) -> creates the SELECTABLE character
-     and sets its PROFILE (skin/eye/brow/lip choices, colours, face SHAPE). Applies live.
-  B) /assetpack/deploy (HTTP) -> installs/updates the custom TEXTURE files (the skin
-     with the baked-in arrow). Only takes effect after a ROBOT RESTART.
+build_aang_face.py bundles BOTH the textures and the character profiles into
+face/Aang.zip. This script ships that whole pack to the robot via the asset-pack
+deploy (HTTP), then selects the face over the Realtime API. The pack carries the
+profiles, so deploy + reboot is all that's needed -- no separate profile step.
 
 Recipe:
   python face/build_aang_face.py            # build face/Aang.zip (NAME is bumped per iteration)
-  python tools/import_aang_face.py deploy    # A + B
-  python tools/import_aang_face.py select    # apply profile live (lips/eyes/shape change now)
-  >>> RESTART THE ROBOT <<<                  # loads the new skin texture (arrow)
-  python tools/import_aang_face.py select    # select again after boot
+  python tools/import_aang_face.py deploy    # HTTP /assetpack/deploy -> textures + profiles
+  >>> RESTART THE ROBOT <<<                  # asset packs load on boot
+  python tools/import_aang_face.py select    # Realtime API -> wear "adult - Aang4"
 
-Env: FURHAT_HOST, AANG_STUDIO_PASSWORD (default "admin"), AANG_CHAR_NAME (default "Aang4").
+Env: FURHAT_HOST, AANG_CHAR_NAME (default "Aang4").
 """
 
 import os
 import sys
 import json
 import time
-import base64
-import hashlib
 
 import requests
 from websocket import create_connection
 
 ROBOT = os.environ.get("FURHAT_HOST", "192.168.1.107")
-PASSWORD = os.environ.get("AANG_STUDIO_PASSWORD", "admin")
 NAME = os.environ.get("AANG_CHAR_NAME", "Aang4")
 MASK = "adult"
 FACE_ID = f"{MASK} - {NAME}"
 ZIP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "face", "Aang.zip")
 
-API_URL = f"ws://{ROBOT}:80/api"
 RT_URL = f"ws://{ROBOT}:9000/v1/events"
 DEPLOY_URL = f"http://{ROBOT}:80/assetpack/deploy"
 
 
-def import_character():
-    """A) Studio login + importCharacter -> selectable character + profile."""
-    pw = hashlib.sha256(PASSWORD.encode()).hexdigest().upper()
-    ws = create_connection(API_URL, timeout=20); ws.settimeout(4)
-
-    def send(en, sid="", **f):
-        m = {"event_name": en, "event_sessionId": sid}; m.update(f); ws.send(json.dumps(m))
-
-    send("furhatos.event.actions.ActionRealTimeAPISubscribe", name="furhatos.event.monitors.MonitorLoginAccess")
-    send("furhatos.event.requests.RequestSystemStatus")
-    time.sleep(0.4)
-    send("furhatos.event.actions.ActionLoginAccess", password=pw)
-    sid = ""
-    t = time.time()
-    while time.time() - t < 10:
-        try:
-            m = json.loads(ws.recv())
-        except Exception:
-            continue
-        if m.get("event_name") == "furhatos.event.monitors.MonitorLoginAccess":
-            if m.get("loginApproved"):
-                sid = m.get("event_sessionId", "")
-            break
-    if not sid:
-        ws.close()
-        raise RuntimeError(f"Studio login failed for password {PASSWORD!r} (set AANG_STUDIO_PASSWORD).")
-
-    send("furhatos.event.actions.ActionRealTimeAPISubscribe", sid, name="furhatos.event.monitors.MonitorConfigFace")
-    time.sleep(0.3)
-    b64 = base64.b64encode(open(ZIP, "rb").read()).decode("ascii")
-    imp = json.dumps({"data": b64, "name": NAME, "password": "", "mask": MASK, "overwrite": True})
-    send("furhatos.event.actions.ActionConfigFace", sid, importCharacter=imp)
-    confirms = 0
-    t = time.time()
-    while time.time() - t < 20:
-        try:
-            m = json.loads(ws.recv())
-        except Exception:
-            continue
-        if m.get("event_name") == "furhatos.event.monitors.MonitorConfigFace":
-            confirms += 1
-    ws.close()
-    return confirms
-
-
 def assetpack_deploy():
-    """B) HTTP asset-pack deploy -> custom textures (loaded on restart)."""
+    """HTTP asset-pack deploy -> ships the whole pack (textures + profiles); loads on restart."""
     with open(ZIP, "rb") as fh:
         r = requests.post(DEPLOY_URL, data={"overwrite": "true"},
                           files={"assetpackzip": ("Aang.zip", fh, "application/zip")}, timeout=120)

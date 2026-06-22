@@ -153,14 +153,12 @@ To install it:
 
 ```powershell
 python face/build_aang_face.py             # bake both faces -> face/Aang.zip
-python tools/import_aang_face.py deploy     # importCharacter (live) + /assetpack/deploy (textures)
+python tools/import_aang_face.py deploy     # /assetpack/deploy -> textures + profiles
 #  >>> RESTART THE ROBOT <<<                 # FaceCore loads asset-pack textures on boot
 python tools/import_aang_face.py select     # face.config -> "adult - Aang4"
 ```
 
-> If your robot's Studio password isn't the factory default, set `AANG_STUDIO_PASSWORD`
-> before `deploy` (the importer logs in over the Studio WebSocket). `AANG_CHAR_NAME`
-> (default `Aang4`) sets the character name the pack installs/selects as.
+> `AANG_CHAR_NAME` (default `Aang4`) sets the character name the pack installs/selects as.
 
 Tweaking the arrow (colour/size/position) or skin **darkness** means: edit the constants
 atop `face/build_aang_face.py`, rebuild, redeploy, **restart**, select. (Restarts are the
