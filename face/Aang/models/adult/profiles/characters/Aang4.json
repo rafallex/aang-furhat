@@ -1,0 +1,251 @@
+{
+  "Parameters": [
+    {
+      "NAME": "EyebrowTilt",
+      "VAL": "-0.77"
+    },
+    {
+      "NAME": "EyebrowDistance",
+      "VAL": "-0.32"
+    },
+    {
+      "NAME": "CheekbonesHeight",
+      "VAL": 1.0
+    },
+    {
+      "NAME": "CheekbonesIntensity",
+      "VAL": 1.0
+    },
+    {
+      "NAME": "EyeDistance",
+      "VAL": -0.23
+    },
+    {
+      "NAME": "EyeSize",
+      "VAL": "0.65"
+    },
+    {
+      "NAME": "EyeHeight",
+      "VAL": "0.00"
+    },
+    {
+      "NAME": "CheekbonesWidth",
+      "VAL": 1.0
+    },
+    {
+      "NAME": "Nose size/nostril width",
+      "VAL": "0.55"
+    },
+    {
+      "NAME": "NoseHeight",
+      "VAL": "0.30"
+    },
+    {
+      "NAME": "MouthSize",
+      "VAL": "0.42"
+    },
+    {
+      "NAME": "MouthWidth",
+      "VAL": "0.42"
+    },
+    {
+      "NAME": "ChinWidth",
+      "VAL": "0.75"
+    },
+    {
+      "NAME": "ChinHeight",
+      "VAL": "0.45"
+    },
+    {
+      "NAME": "EyesTilt",
+      "VAL": 0.0
+    },
+    {
+      "NAME": "MouthHeight",
+      "VAL": 0.15
+    },
+    {
+      "NAME": "EyebrowSize",
+      "VAL": "0.30"
+    },
+    {
+      "NAME": "EyebrowHeight",
+      "VAL": "-0.27"
+    },
+    {
+      "NAME": "EyeRoundness",
+      "VAL": "0.55"
+    },
+    {
+      "NAME": "BottomLipThickness",
+      "VAL": 0.44
+    },
+    {
+      "NAME": "TopLipThickness",
+      "VAL": 0.6
+    },
+    {
+      "NAME": "CalibrationEyeVertical",
+      "VAL": "-0.59"
+    },
+    {
+      "NAME": "tm_skins_t",
+      "VAL": "aang7"
+    },
+    {
+      "NAME": "tm_skins_c",
+      "VAL": "#ADAC78FF"
+    },
+    {
+      "NAME": "tm_eyes_t",
+      "VAL": "default"
+    },
+    {
+      "NAME": "tm_eyes_c",
+      "VAL": "#6B93B8FF"
+    },
+    {
+      "NAME": "tm_teeth_t",
+      "VAL": "realistic_old_01"
+    },
+    {
+      "NAME": "tm_teeth_c",
+      "VAL": "#FFFFFFFF"
+    },
+    {
+      "NAME": "tm_eyelashes_t",
+      "VAL": "naturalistic_thick_01"
+    },
+    {
+      "NAME": "tm_eyelashes_c",
+      "VAL": "#FFFFFFFF"
+    },
+    {
+      "NAME": "to_scars_t",
+      "VAL": "default"
+    },
+    {
+      "NAME": "to_scars_c",
+      "VAL": "#8D2C0EFF"
+    },
+    {
+      "NAME": "to_skin-texture_t",
+      "VAL": "default"
+    },
+    {
+      "NAME": "to_skin-texture_c",
+      "VAL": "#00000018"
+    },
+    {
+      "NAME": "to_eye-shadow_t",
+      "VAL": "default"
+    },
+    {
+      "NAME": "to_eye-shadow_c",
+      "VAL": "#33336585"
+    },
+    {
+      "NAME": "to_eye-liner_t",
+      "VAL": ""
+    },
+    {
+      "NAME": "to_eye-effects_t",
+      "VAL": ""
+    },
+    {
+      "NAME": "to_freckles_t",
+      "VAL": ""
+    },
+    {
+      "NAME": "to_freckles_c",
+      "VAL": "#915927FF"
+    },
+    {
+      "NAME": "to_spots_t",
+      "VAL": ""
+    },
+    {
+      "NAME": "to_spots_c",
+      "VAL": "#5A331AFF"
+    },
+    {
+      "NAME": "to_skin-blush_t",
+      "VAL": ""
+    },
+    {
+      "NAME": "to_nose_t",
+      "VAL": ""
+    },
+    {
+      "NAME": "to_nose_c",
+      "VAL": "#9C2C2CFF"
+    },
+    {
+      "NAME": "to_eyebrows_t",
+      "VAL": "stylized_thin_06"
+    },
+    {
+      "NAME": "to_eyebrows_c",
+      "VAL": "#3D2F28FF"
+    },
+    {
+      "NAME": "to_cyborg-top_t",
+      "VAL": "default"
+    },
+    {
+      "NAME": "to_cyborg-top_c",
+      "VAL": "#000000FF"
+    },
+    {
+      "NAME": "to_cyborg-bottom_t",
+      "VAL": "default"
+    },
+    {
+      "NAME": "to_cyborg-bottom_c",
+      "VAL": "#000000FF"
+    },
+    {
+      "NAME": "to_facial-hair_t",
+      "VAL": ""
+    },
+    {
+      "NAME": "to_facial-hair_c",
+      "VAL": "#000000FF"
+    },
+    {
+      "NAME": "to_lips_t",
+      "VAL": ""
+    },
+    {
+      "NAME": "to_lips_c",
+      "VAL": "#5C3A32FF"
+    },
+    {
+      "NAME": "to_cyborg-lips_t",
+      "VAL": "default"
+    },
+    {
+      "NAME": "to_cyborg-lips_c",
+      "VAL": "#1C0505FF"
+    },
+    {
+      "NAME": "to_tattoos_t",
+      "VAL": ""
+    },
+    {
+      "NAME": "to_tattoos_c",
+      "VAL": "#1C8EAEFF"
+    },
+    {
+      "NAME": "to_piercings_t",
+      "VAL": "default"
+    },
+    {
+      "NAME": "to_piercings_c",
+      "VAL": "#C4C4C4FF"
+    }
+  ],
+  "MaskID": "adult",
+  "RigID": "adult",
+  "SaveDate": "2026-06-15T12:09:32.118445Z"
+}

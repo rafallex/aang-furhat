@@ -11,10 +11,13 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Built face pack + extracted Furhat asset textures (derived; regenerate via build_aang_face.py)
+# generated Avatar-State audio (throwaway; the shipped whoosh.wav stays tracked as the no-numpy fallback)
+aang/_sfx/*
+!aang/_sfx/whoosh.wav
+
+# Built face pack — the zip is a derived build artifact (rebuild via build_aang_face.py).
+# The source textures (face/Aang/) and preview ARE committed so the repo is self-contained.
 face/Aang.zip
-face/Aang/
-face/aang_face_preview.png
 
 # editors / IDEs
 .idea/

@@ -1,0 +1,130 @@
+{
+	"materialDefinitions": [
+		{
+			"name": "SkinMaterial",
+			"category": "skins",
+			"textures": {
+				"_MainTex": "skinAlbedo",
+				"_BumpMap": "skinNormals"
+			}
+		},
+		{
+			"name": "LeftEyeMaterial",
+			"category": "eyes",
+			"textures": {
+				"_MainTex": "eye",
+				"_EyeControl": "eye_irisMask"
+			}
+		},
+		{
+			"name": "RightEyeMaterial",
+			"category": "eyes",
+			"textures": {
+				"_MainTex": "eye",
+				"_EyeControl": "eye_irisMask"
+			}
+		},
+		{
+			"name": "TeethLower",
+			"category": "teeth",
+			"textures": {
+				"_MainTex": "teethLower"
+			}
+		},
+		{
+			"name": "TeethUpper",
+			"category": "teeth",
+			"textures": {
+				"_MainTex": "teethUpper"
+			}
+		},
+		{
+			"name": "Tongue",
+			"category": "teeth",
+			"textures": {
+				"_MainTex": "tongue"
+			}
+		},
+		{
+			"name": "EyeLashes",
+			"category": "eyelashes",
+			"textures": {
+				"_MainTex": "eyelashesAlbedo"
+			}
+		}
+		
+	],	
+	"overlays": [
+		{
+			"category":"scars",
+			"color" : "#8D2C0EFF"
+		},
+		{
+			"category":"skin-texture",
+			"color" : "#0000009A"
+		},
+		{
+			"category":"eye-shadow",
+			"color" : "#33336585"
+		},
+		{
+			"category":"eye-liner",
+			"color" : "#340A36FF"
+		},
+		{
+			"category":"eye-effects",
+			"color" : "#000000FF"
+		},
+		{
+			"category":"freckles",
+			"color" : "#915927FF"
+		},
+		{
+			"category":"spots",
+			"color" : "#5A331AFF"
+		},
+		{
+			"category":"skin-blush",
+			"color" : "#CC7A5259"
+		},
+		{
+			"category":"nose",
+			"color" : "#9C2C2CFF"
+		},
+		{
+			"category":"eyebrows",
+			"color" : "#000000FF"
+		},
+		{
+			"category":"cyborg-top",
+			"color" : "#000000FF"
+		},
+		{
+			"category":"cyborg-bottom",
+			"color" : "#000000FF"
+		},
+		{
+			"category":"facial-hair",
+			"color" : "#000000FF"
+		},
+		{
+			"category":"lips",
+			"color" : "#805147FF"
+		},
+		{
+			"category":"cyborg-lips",
+			"color" : "#1C0505FF"
+		},
+		{
+			"category":"tattoos",
+			"color" : "#1C8EAEFF"
+		},
+		{
+			"category":"piercings",
+			"color" : "#C4C4C4FF"
+		}
+	],
+	"overlay-albedo-transparency": "albedo",
+	"overlay-normals": "normals",
+	"overlay-metalness": "skinMetallicSmoothness"
+}
