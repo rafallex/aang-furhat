@@ -1,29 +1,18 @@
-"""Generates the Avatar State wind/whoosh sound and serves it over HTTP.
+"""Generates the Avatar-State wind/whoosh sound effect.
 
-`request.speak.audio` plays a WAV from a URL that the *robot* fetches, so the
-file is served from this PC on the LAN (not localhost). Best-effort: if numpy
-isn't available or the port can't bind, the caller disables SFX and the rest of
-the show carries on.
+This module only PRODUCES the WAV; the shared LanAudioServer (see lan_audio.py)
+is what actually serves it to the robot. Best-effort: if numpy isn't available
+the file simply isn't (re)generated and the caller disables the wind.
 """
 
 import os
 import wave
-import socket
-import struct
-import threading
-from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
 
-def detect_lan_ip():
-    """Best guess at this machine's LAN IP (the address the robot can reach)."""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
+WHOOSH_FILENAME = "whoosh.wav"
+# Default home for the wind file: the repo ships a pre-generated copy here, so the
+# wind still works on a machine without numpy. The app serves this directory.
+SFX_DIR = os.path.join(os.path.dirname(__file__), "_sfx")
 
 
 def generate_whoosh(path, seconds=3.4, sr=16000):
@@ -63,46 +52,16 @@ def generate_whoosh(path, seconds=3.4, sr=16000):
         w.writeframes(pcm.tobytes())
 
 
-class SFX:
-    def __init__(self, cfg):
-        self.cfg = cfg
-        self.dir = os.path.join(os.path.dirname(__file__), "_sfx")
-        os.makedirs(self.dir, exist_ok=True)
-        self.filename = "whoosh.wav"
-        self.path = os.path.join(self.dir, self.filename)
-        self.ip = cfg.sfx_host or detect_lan_ip()
-        self.port = cfg.sfx_port
-        self.httpd = None
-        self._thread = None
+def ensure_whoosh(directory):
+    """Make sure whoosh.wav exists in `directory`; return its filename (or None).
 
-    def url(self):
-        return f"http://{self.ip}:{self.port}/{self.filename}"
-
-    def start(self):
-        if not os.path.exists(self.path):
-            generate_whoosh(self.path)
-        directory = self.dir
-
-        class Handler(SimpleHTTPRequestHandler):
-            def __init__(self, *a, **k):
-                super().__init__(*a, directory=directory, **k)
-
-            def log_message(self, *a):
-                pass  # keep the console clean
-
-        self.httpd = ThreadingHTTPServer(("0.0.0.0", self.port), Handler)
-        self._thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
-        self._thread.start()
-        return self.url()
-
-    def stop(self):
-        if self.httpd:
-            try:
-                self.httpd.shutdown()
-                self.httpd.server_close()   # actually release the listening socket
-            except Exception:
-                pass
-            if self._thread:
-                self._thread.join(timeout=1.0)
-            self.httpd = None
-            self._thread = None
+    If it's already there (e.g. the copy shipped in the repo) we keep it, so the
+    wind works even without numpy. Returns None only if it's missing AND can't be
+    generated -- the caller then just runs without the wind."""
+    path = os.path.join(directory, WHOOSH_FILENAME)
+    if not os.path.exists(path):
+        try:
+            generate_whoosh(path)
+        except Exception:
+            return None
+    return WHOOSH_FILENAME

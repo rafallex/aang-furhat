@@ -16,6 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from aang.config import Config
 from aang.furhat import FurhatRT
 from aang.avatar_state import AvatarState, CALM_BLUE
+from aang.lan_audio import LanAudioServer
+from aang import sfx
 
 
 def main():
@@ -23,16 +25,19 @@ def main():
     f = FurhatRT(cfg.host, cfg.port, cfg.auth_key)
     print("connect:", f.connect().get("scope"))
 
-    sfx = None
+    audio = None
+    wind_url = None
     if cfg.sfx_enabled:
         try:
-            from aang.sfx import SFX
-            sfx = SFX(cfg)
-            print("wind at:", sfx.start())
+            audio = LanAudioServer(sfx.SFX_DIR, host=cfg.sfx_host, port=cfg.sfx_port)
+            print("audio server at:", audio.start())
+            wind_file = sfx.ensure_whoosh(audio.directory)
+            if wind_file:
+                wind_url = audio.url_for(wind_file)
         except Exception as e:
             print("SFX disabled:", e)
 
-    avatar = AvatarState(f, cfg, sfx)
+    avatar = AvatarState(f, cfg, wind_url=wind_url)
 
     # Dress as Aang.
     f.system_config(volume=cfg.volume)

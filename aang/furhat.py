@@ -7,10 +7,10 @@ thread drives the robot with the high-level helpers below and blocks on
 `wait_for(...)` when it needs a specific response (e.g. end-of-speech).
 """
 
+import sys
 import json
 import time
 import queue
-import logging
 import threading
 
 from websocket import (
@@ -18,8 +18,6 @@ from websocket import (
     WebSocketTimeoutException,
     WebSocketConnectionClosedException,
 )
-
-log = logging.getLogger(__name__)
 
 
 class FurhatRT:
@@ -41,11 +39,7 @@ class FurhatRT:
         self._ws.settimeout(0.4)
         self._running = True
         self.alive = True
-        # Bind the reader to THIS socket: after a reconnect swaps self._ws, the old reader
-        # sees `ws is not self._ws`, exits, and can never write a stale event into the new
-        # session's queue.
-        self._reader = threading.Thread(target=self._read_loop, args=(self._ws,),
-                                        name="furhat-reader", daemon=True)
+        self._reader = threading.Thread(target=self._read_loop, name="furhat-reader", daemon=True)
         self._reader.start()
 
         auth = {"type": "request.auth"}
@@ -69,37 +63,23 @@ class FurhatRT:
 
     def reconnect(self, timeout=10):
         """Re-establish the WebSocket after a drop. Re-auths; returns the auth response."""
-        old = self._reader
         try:
             self.close()
         except Exception:
             pass
-        # Join the previous reader before starting a new one, so a lingering thread can't
-        # race the new session on the (about to be replaced) event queue.
-        if old and old.is_alive():
-            old.join(timeout=1.0)
         time.sleep(0.5)
         self._events = queue.Queue()
         return self.connect(timeout=timeout)
 
-    def _read_loop(self, ws):
-        while self._running and ws is self._ws:
+    def _read_loop(self):
+        while self._running:
             try:
-                raw = ws.recv()
+                raw = self._ws.recv()
             except WebSocketTimeoutException:
                 continue
             except (WebSocketConnectionClosedException, OSError):
-                # Server-side close: signal death NOW instead of waiting for the next send()
-                # to notice, so the main loop reconnects promptly rather than blocking out a
-                # full listen/speak timeout. Guard on `ws is self._ws` so a stale reader
-                # exiting after a reconnect can't clobber the fresh session's alive flag.
-                if ws is self._ws:
-                    self.alive = False
                 break
             except Exception:
-                log.exception("furhat reader loop error")
-                if ws is self._ws:
-                    self.alive = False
                 break
             if not raw:
                 continue
@@ -110,10 +90,8 @@ class FurhatRT:
             if self.verbose:
                 t = msg.get("type", "")
                 if msg.get("error") or t.startswith("error") or "error" in t:
-                    log.warning("furhat error event: %s", msg)
-            # Only the live session's reader may deliver events.
-            if ws is self._ws:
-                self._events.put(msg)
+                    print("[furhat error]", msg, file=sys.stderr)
+            self._events.put(msg)
 
     # ------------------------------------------------------------------ io
     def send(self, payload):
@@ -121,17 +99,8 @@ class FurhatRT:
         try:
             with self._send_lock:
                 self._ws.send(data)
-        except (WebSocketConnectionClosedException, OSError) as e:
-            # A genuinely dropped/closed socket (BrokenPipeError is an OSError too): mark
-            # dead and let the main loop reconnect.
-            log.warning("send failed, connection looks dead (%s: %s) -> reconnecting",
-                        type(e).__name__, e)
-            self.alive = False
         except Exception:
-            # Anything else is NOT a dropped connection -- surface it instead of silently
-            # masquerading as a drop and triggering a needless full reconnect + re-dress.
-            log.exception("unexpected send error (type=%s)", payload.get("type"))
-            raise
+            self.alive = False   # socket dropped; the main loop will reconnect
 
     def drain(self):
         """Discard any buffered incoming events."""
@@ -155,8 +124,6 @@ class FurhatRT:
         while True:
             if tick and tick():
                 return None
-            if not self.alive:
-                return None   # socket died mid-wait: stop blocking so the caller can reconnect
             remaining = end - time.time()
             if remaining <= 0:
                 return None
@@ -180,7 +147,7 @@ class FurhatRT:
     def say_and_wait(self, text, timeout=40, **kw):
         self.drain()
         self.say(text, **kw)
-        return self._wait_speak_end(timeout)
+        self.wait_for("response.speak.end", timeout=timeout)
 
     def stop_speaking(self):
         self.send({"type": "request.speak.stop"})
@@ -192,17 +159,7 @@ class FurhatRT:
     def speak_audio_and_wait(self, url, text="(audio)", lipsync=True, abort=True, timeout=40):
         self.drain()
         self.speak_audio(url, text=text, lipsync=lipsync, abort=abort)
-        return self._wait_speak_end(timeout)
-
-    def _wait_speak_end(self, timeout):
-        """Block until the current speak finishes. Returns True if it ended cleanly, False
-        on timeout or an interrupting stop -- so a stuck speak is distinguishable from a
-        completed one (a bare wait_for returned None for both and the caller couldn't tell)."""
-        msg = self.wait_for(("response.speak.end", "response.speak.stop"), timeout=timeout)
-        if msg is None:
-            log.warning("speak did not finish within %ss (no speak.end) -- continuing", timeout)
-            return False
-        return msg.get("type") == "response.speak.end"
+        self.wait_for("response.speak.end", timeout=timeout)
 
     # ------------------------------------------------------------------ gesture / face
     def gesture(self, name, intensity=1.0, duration=1.0):
@@ -310,3 +267,5 @@ class FurhatRT:
         if msg.get("type") == "response.hear.end":
             return (msg.get("text") or "").strip() or None
         return None
+
+

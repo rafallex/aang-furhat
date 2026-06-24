@@ -3,8 +3,9 @@ keyless neural TTS (edge-tts) and drop the engine's OWN pitch well below normal 
 the depth is clean -- NO reverb, NO layered/detuned "chorus" copies. The old "chorus of past
 lives + heavy reverb" was dropped: it doubled and sounded muddy on the robot's own speaker.
 
-render(text) -> path to a WAV the robot can play via request.speak.audio (the audio FILE is
-the voice; the text field is lip-sync only).
+render(text, out_dir) -> path to a WAV the robot can play via request.speak.audio (the audio
+FILE is the voice; the text field is lip-sync only). The shared LanAudioServer (lan_audio.py)
+serves out_dir, so this module no longer runs its own HTTP server.
 
 ffmpeg (from imageio-ffmpeg) is used ONLY to decode the mp3; all WAV I/O goes through the
 stdlib `wave` module so pydub never needs ffprobe (which imageio doesn't ship).
@@ -12,13 +13,9 @@ stdlib `wave` module so pydub never needs ffprobe (which imageio doesn't ship).
 
 import os
 import wave
-import socket
 import asyncio
 import warnings
-import functools
-import threading
 import subprocess
-import http.server
 
 import edge_tts
 import imageio_ffmpeg
@@ -34,66 +31,6 @@ with warnings.catch_warnings():
 AudioSegment.converter = _FFMPEG
 AudioSegment.ffmpeg = _FFMPEG
 EDGE_VOICE = os.environ.get("AANG_FX_VOICE", "en-US-ChristopherNeural")
-OUT_DIR = os.environ.get("AANG_FX_DIR", os.path.join(os.environ.get("TEMP", "."), "aang_fx"))
-os.makedirs(OUT_DIR, exist_ok=True)
-
-# ---- tiny HTTP server so the robot can fetch the rendered WAVs (request.speak.audio) ----
-_server = None
-_base_url = None
-_thread = None
-
-
-class _QuietHandler(http.server.SimpleHTTPRequestHandler):
-    def log_message(self, *a):
-        pass
-
-
-def _lan_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80)); return s.getsockname()[0]
-    finally:
-        s.close()
-
-
-def ensure_server(port=None):
-    """Start (once) an HTTP server serving OUT_DIR; return its base URL.
-
-    Port precedence: explicit arg > AANG_FX_PORT env var > 8079 default. The robot fetches
-    the rendered deep-voice WAVs from this port, so it must be reachable on the LAN / through
-    the firewall -- this is a SEPARATE port from the wind-SFX one (AANG_SFX_PORT)."""
-    global _server, _base_url, _thread
-    if port is None:
-        port = int(os.environ.get("AANG_FX_PORT", "8079"))
-    if _server is None:
-        handler = functools.partial(_QuietHandler, directory=OUT_DIR)
-        _server = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
-        _server.daemon_threads = True
-        _thread = threading.Thread(target=_server.serve_forever, daemon=True)
-        _thread.start()
-        _base_url = f"http://{_lan_ip()}:{port}"
-    return _base_url
-
-
-def shutdown():
-    """Stop the FX HTTP server (call on app exit so it doesn't linger). No-op if never
-    started, so it's safe to call unconditionally in a finally block."""
-    global _server, _base_url, _thread
-    if _server is not None:
-        try:
-            _server.shutdown()
-            _server.server_close()
-        except Exception:
-            pass
-        if _thread is not None:
-            _thread.join(timeout=1.0)
-        _server = None
-        _base_url = None
-        _thread = None
-
-
-def url_for(name="avatar", bust=0):
-    return f"{_base_url}/{name}.wav?t={bust}"
 
 
 def _read_wav(path):
@@ -117,10 +54,11 @@ async def _tts(text, mp3_path, voice=EDGE_VOICE, rate="-8%", pitch="-30Hz"):
     await edge_tts.Communicate(text, voice, rate=rate, pitch=pitch).save(mp3_path)
 
 
-def render(text, name="avatar"):
-    mp3 = os.path.join(OUT_DIR, name + ".mp3")
-    raw = os.path.join(OUT_DIR, name + "_raw.wav")
-    out = os.path.join(OUT_DIR, name + ".wav")
+def render(text, out_dir, name="avatar"):
+    os.makedirs(out_dir, exist_ok=True)
+    mp3 = os.path.join(out_dir, name + ".mp3")
+    raw = os.path.join(out_dir, name + "_raw.wav")
+    out = os.path.join(out_dir, name + ".wav")
     asyncio.run(_tts(text, mp3))
     subprocess.run([_FFMPEG, "-y", "-i", mp3, "-ac", "1", "-ar", "24000", raw],
                    check=True, capture_output=True)
@@ -135,7 +73,7 @@ def render(text, name="avatar"):
 
 
 if __name__ == "__main__":
-    import sys
+    import sys, tempfile
     t = sys.argv[1] if len(sys.argv) > 1 else \
         "You should not have done that. We are the Avatar, and your reckoning is here."
-    print(render(t))
+    print(render(t, tempfile.gettempdir()))

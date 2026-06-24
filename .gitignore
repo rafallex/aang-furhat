@@ -16,8 +16,9 @@ face/Aang.zip
 face/Aang/
 face/aang_face_preview.png
 
-# JetBrains IDE (PyCharm) project config
+# editors / IDEs
 .idea/
+.vscode/
 
 # JVM crash / replay logs
 *.log

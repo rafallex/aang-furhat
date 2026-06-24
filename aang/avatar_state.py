@@ -2,25 +2,17 @@
 
 enter()  -> freeze the face into the otherworldly stare, surge the LED ring to a
             breathing white glow, rise the head, swap to a deep booming voice,
-            play the wind, and announce the awakening.
+            play the wind, and arm the deep voice. The awakening LINE itself is
+            spoken by say_avatar() in aang_app.py (deep-voice FX) right after enter().
 exit()   -> wind everything back down to the calm young monk.
 
 While active, a background thread keeps the LED ring "breathing" so the glow
 never looks static during conversation.
-
-Note: the spoken awakening line is now driven by say_avatar in aang_app.py (deep-voice
-FX); enter(speak=True) is a legacy/standalone path.
 """
 
 import math
 import time
-import random
-import logging
 import threading
-
-from .persona import ENTER_LINES
-
-log = logging.getLogger(__name__)
 
 # ----- palette -----
 CALM_BLUE = "#2A6BC0"     # airbender calm (idle)
@@ -51,10 +43,10 @@ def scale_hex(hex_color, factor):
 
 
 class AvatarState:
-    def __init__(self, furhat, cfg, sfx=None):
+    def __init__(self, furhat, cfg, wind_url=None):
         self.f = furhat
         self.cfg = cfg
-        self.sfx = sfx
+        self.wind_url = wind_url   # URL of the wind WAV on the shared LAN audio server
         self.active = False
         self.entered_at = 0.0          # time.time() when the Avatar State last ignited
         self._glow_thread = None
@@ -70,7 +62,7 @@ class AvatarState:
             time.sleep(0.06)
 
     # ------------------------------------------------------------------ enter
-    def enter(self, brain=None, speak=True):
+    def enter(self):
         if self.active:
             return
         self.active = True
@@ -92,11 +84,11 @@ class AvatarState:
         f.face_params(AVATAR_STARE)
 
         # 4. The rushing wind.
-        if self.sfx:
+        if self.wind_url:
             try:
-                f.speak_audio(self.sfx.url(), text="(wind)", lipsync=False, abort=True)
+                f.speak_audio(self.wind_url, text="(wind)", lipsync=False, abort=True)
             except Exception:
-                log.debug("wind sfx failed", exc_info=True)
+                pass
 
         # 5. Slow rise of the head, eyes to the sky.
         f.headpose(pitch=LOOK_UP_PITCH, yaw=0.0, roll=0.0, speed="xslow")
@@ -111,15 +103,14 @@ class AvatarState:
         self._glow_thread = threading.Thread(target=self._glow_loop, daemon=True)
         self._glow_thread.start()
 
-        # 8. Deep voice + the awakening line.
+        # 8. Arm the deep native voice. (This is only a fallback — the spoken Avatar
+        #    lines are rendered deep-voice FX, played by say_avatar() in aang_app.py.)
         f.voice_config(voice_id=self.cfg.voice_avatar)
         time.sleep(0.15)
         f.headpose(pitch=LOOK_UP_PITCH * 0.35, speed="slow")  # settle, still elevated
-        if speak:
-            f.say_and_wait(random.choice(ENTER_LINES))
 
     # ------------------------------------------------------------------ exit
-    def exit(self, speak=True):
+    def exit(self):
         if not self.active:
             return
         self.active = False
@@ -132,7 +123,6 @@ class AvatarState:
 
         # No spoken exit line: in the show the Avatar State just SUBSIDES (no farewell in
         # the Avatar voice). He simply returns to himself — the conversation carries on as Aang.
-        # (`speak` kept for signature compatibility; intentionally unused now.)
 
         # Restore the young monk.
         f.voice_config(voice_id=self.cfg.voice_normal)
@@ -150,19 +140,6 @@ class AvatarState:
             f.led(scale_hex(GLOW_CYAN, k / 10.0))
             time.sleep(0.05)
         f.led(CALM_BLUE)
-
-    # ------------------------------------------------------------------ force stop
-    def force_stop(self):
-        """Tear down just the breathing-glow thread, without the full exit() choreography.
-        Used on reconnect: the socket is being rebuilt and the following dress() resets the
-        LED/voice anyway, so restoring them here would only fight it -- but the glow thread
-        MUST be stopped or it keeps firing ~16 LED sends/sec into the new socket and flickers
-        against dress()'s calm blue."""
-        self.active = False
-        self._glow_stop.set()
-        if self._glow_thread:
-            self._glow_thread.join(timeout=1.0)
-            self._glow_thread = None
 
     # ------------------------------------------------------------------ self-heal
     def assert_look(self):

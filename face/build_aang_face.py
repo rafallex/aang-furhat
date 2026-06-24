@@ -116,6 +116,7 @@ def write_profile(char, skin, eye_set, eye_color, skin_tint):
     p["to_lips_t"] = ""               # no lipstick
     p["to_skin-texture_c"] = "#00000018"
     p["to_eyebrows_c"] = "#3D2F28FF"
+    p["tm_eyelashes_c"] = "#FFFFFF00"   # hide inherited Jules lashes (male character)
     p["to_freckles_t"] = ""
     p["to_spots_t"] = ""
     p["to_nose_t"] = ""
