@@ -17,7 +17,6 @@ from aang.config import Config
 from aang.furhat import FurhatRT
 from aang.avatar_state import AvatarState, CALM_BLUE
 from aang.lan_audio import LanAudioServer
-from aang import sfx
 
 
 def main():
@@ -29,11 +28,9 @@ def main():
     wind_url = None
     if cfg.sfx_enabled:
         try:
-            audio = LanAudioServer(sfx.SFX_DIR, host=cfg.sfx_host, port=cfg.sfx_port)
+            audio = LanAudioServer(host=cfg.sfx_host, port=cfg.sfx_port)
             print("audio server at:", audio.start())
-            wind_file = sfx.ensure_whoosh(audio.directory)
-            if wind_file:
-                wind_url = audio.url_for(wind_file)
+            wind_url = audio.wind_url()
         except Exception as e:
             print("SFX disabled:", e)
 
