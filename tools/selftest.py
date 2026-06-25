@@ -1,11 +1,11 @@
 """Offline self-test for the Aang code (no physical robot needed).
 
 Exercises everything except the live robot WebSocket: module imports, the merged
-LanAudioServer (including the render -> serve path say_avatar uses), the wind
-generator, the brain fallback (+ a live groq call if GROQ_API_KEY is set), and
+LanAudioServer (including the render -> serve path say_avatar uses), the committed
+wind served by lan_audio, the brain fallback (+ a live groq call if GROQ_API_KEY is set), and
 AvatarState.enter()/exit() against a stub robot. Run after any change to catch
 breakage before touching the robot. Renders into temp dirs so it never litters
-aang/_sfx.
+the served sfx/ folder.
 
 Run:  python tools/selftest.py
 """
@@ -38,7 +38,7 @@ def check(name, fn):
 
 def t_imports():
     for m in ["aang.config", "aang.furhat", "aang.brain", "aang.persona",
-              "aang.avatar_state", "aang.sfx", "aang.avatar_voice_fx",
+              "aang.avatar_state", "aang.avatar_voice_fx",
               "aang.lan_audio", "aang_app"]:
         importlib.import_module(m)
 check("import every module (including aang_app)", t_imports)
@@ -47,7 +47,7 @@ from aang.config import Config
 from aang.brain import Brain
 from aang.avatar_state import AvatarState
 from aang.lan_audio import LanAudioServer
-from aang import sfx, avatar_voice_fx as voicefx
+from aang import avatar_voice_fx as voicefx
 
 cfg = Config()
 
@@ -65,14 +65,19 @@ def t_server():
 check("LanAudioServer serves a file over HTTP", t_server)
 
 
-def t_generate():
-    p = os.path.join(tempfile.gettempdir(), "aang_test_whoosh.wav")
-    if os.path.exists(p):
-        os.remove(p)
-    sfx.generate_whoosh(p, seconds=0.3)
-    assert os.path.exists(p) and os.path.getsize(p) > 100
-    os.remove(p)
-check("sfx.generate_whoosh writes a WAV (numpy)", t_generate)
+def t_wind():
+    # The wind is a committed asset served by lan_audio -- no runtime generation.
+    from aang.lan_audio import WIND_FILENAME
+    srv = LanAudioServer(host="127.0.0.1", port=8128); srv.start()
+    try:
+        url = srv.wind_url()
+        assert url and url.endswith(WIND_FILENAME), url
+        with urllib.request.urlopen(url, timeout=5) as r:
+            n = len(r.read())
+        assert r.status == 200 and n > 1000, (r.status, n)
+    finally:
+        srv.stop()
+check("lan_audio serves the committed wind (whoosh.wav)", t_wind)
 
 
 def t_brain_fallback():

@@ -16,6 +16,14 @@ import threading
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
 
+# The one directory of audio the robot fetches over the LAN: the committed
+# Avatar-State wind (sfx/whoosh.wav, force-tracked in git) plus throwaway rendered
+# deep-voice files (gitignored). The wind lives in its own top-level folder (like
+# face/); retune it with sfx/build_whoosh.py.
+AUDIO_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sfx")
+WIND_FILENAME = "whoosh.wav"
+
+
 def detect_lan_ip():
     """Best guess at this machine's LAN IP (the address the robot can reach).
 
@@ -39,7 +47,7 @@ class _QuietHandler(SimpleHTTPRequestHandler):
 class LanAudioServer:
     """Serves a single directory of WAVs to the robot over HTTP."""
 
-    def __init__(self, directory, host="", port=8077):
+    def __init__(self, directory=AUDIO_DIR, host="", port=8077):
         self.directory = directory
         os.makedirs(directory, exist_ok=True)
         self.host = host or detect_lan_ip()
@@ -61,6 +69,14 @@ class LanAudioServer:
         robot never replays a stale file left from a previous run."""
         url = f"{self.base_url()}/{filename}"
         return f"{url}?t={bust}" if bust is not None else url
+
+    def wind_url(self):
+        """URL for the committed Avatar-State wind, or None if it's missing.
+        The WAV is shipped in the repo (force-tracked) -- no runtime generation;
+        retune it with sfx/build_whoosh.py."""
+        if os.path.exists(os.path.join(self.directory, WIND_FILENAME)):
+            return self.url_for(WIND_FILENAME)
+        return None
 
     def stop(self):
         if self.httpd:

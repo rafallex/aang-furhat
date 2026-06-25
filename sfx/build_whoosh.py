@@ -1,18 +1,18 @@
-"""Generates the Avatar-State wind/whoosh sound effect.
+"""Build the Avatar-State wind/whoosh WAV (offline; needs numpy).
 
-This module only PRODUCES the WAV; the shared LanAudioServer (see lan_audio.py)
-is what actually serves it to the robot. Best-effort: if numpy isn't available
-the file simply isn't (re)generated and the caller disables the wind.
+The wind is a committed static asset (sfx/whoosh.wav, force-tracked in git). At
+runtime the app never regenerates it -- aang/lan_audio.py just serves the file.
+Run this by hand ONLY when you want to retune the sound (length, pitch sweep, mix),
+then commit the new whoosh.wav. Mirrors face/build_aang_face.py: the builder and
+its committed asset live together in their own folder, outside the aang package.
+
+Run:  python sfx/build_whoosh.py
 """
 
 import os
 import wave
 
-
-WHOOSH_FILENAME = "whoosh.wav"
-# Default home for the wind file: the repo ships a pre-generated copy here, so the
-# wind still works on a machine without numpy. The app serves this directory.
-SFX_DIR = os.path.join(os.path.dirname(__file__), "_sfx")
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "whoosh.wav")
 
 
 def generate_whoosh(path, seconds=3.4, sr=16000):
@@ -52,16 +52,6 @@ def generate_whoosh(path, seconds=3.4, sr=16000):
         w.writeframes(pcm.tobytes())
 
 
-def ensure_whoosh(directory):
-    """Make sure whoosh.wav exists in `directory`; return its filename (or None).
-
-    If it's already there (e.g. the copy shipped in the repo) we keep it, so the
-    wind works even without numpy. Returns None only if it's missing AND can't be
-    generated -- the caller then just runs without the wind."""
-    path = os.path.join(directory, WHOOSH_FILENAME)
-    if not os.path.exists(path):
-        try:
-            generate_whoosh(path)
-        except Exception:
-            return None
-    return WHOOSH_FILENAME
+if __name__ == "__main__":
+    generate_whoosh(OUT)
+    print(f"wrote {OUT} ({os.path.getsize(OUT)} bytes)")

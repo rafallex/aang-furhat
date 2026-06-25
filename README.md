@@ -100,9 +100,10 @@ only optional **manual overrides**:
 | `aang/brain.py` | Pluggable LLM brain — Groq (default), Anthropic, or canned fallback; emits `[CALM]`/`[AVATAR]` tags for self-switching. |
 | `aang/avatar_state.py` | The Avatar State choreography (face swap, LED glow, head-rise, glare, wind, auto-return). |
 | `aang/avatar_voice_fx.py` | The **deep voice**: `edge-tts` rendered with the engine's pitch dropped (~-30Hz), dry — no reverb, no layered copies — served to the robot over HTTP. |
-| `aang/sfx.py` | Generates the wind-whoosh WAV and serves it to the robot over HTTP. |
+| `aang/lan_audio.py` | One HTTP server that serves the robot all LAN audio from a single directory/port — the committed Avatar-State wind (`whoosh.wav`) and the rendered deep voice. |
 | `aang/config.py` | All settings, each overridable by an environment variable. |
 | `face/build_aang_face.py` | Builds the custom face pack `face/Aang.zip` (both faces, baked arrow). |
+| `sfx/build_whoosh.py` | Builds the committed Avatar-State wind `sfx/whoosh.wav` (offline, needs numpy) — run only to retune the sound, then commit it. |
 | `tools/import_aang_face.py` | Installs the face pack on the robot (`deploy` / `select`). |
 | `tools/probe.py` | Lists the robot's installed faces and voices. |
 | `tools/smoke_test.py` | One-shot hardware check of every primitive Aang uses. |

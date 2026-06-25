@@ -31,7 +31,6 @@ from aang.persona import (
     OPENING_LINES, ENTER_LINES, TRIGGER_PHRASES, DEACTIVATE_PHRASES, QUIT_PHRASES,
     THINKING_GESTURES,
 )
-from aang import sfx
 from aang import avatar_voice_fx as voicefx
 from aang.lan_audio import LanAudioServer
 
@@ -113,19 +112,21 @@ def main():
     audio = None
     if cfg.sfx_enabled or cfg.avatar_voice_fx:
         try:
-            audio = LanAudioServer(sfx.SFX_DIR, host=cfg.sfx_host, port=cfg.sfx_port)
+            audio = LanAudioServer(host=cfg.sfx_host, port=cfg.sfx_port)
             print(f"Audio server at {audio.start()}")
         except Exception as e:
             print(f"Audio server disabled ({e})")
             audio = None
 
-    # The wind: generate the WAV once (if missing) into the served directory.
+    # The wind is a committed asset (sfx/whoosh.wav) the audio server already
+    # serves -- no runtime generation. Retune it with sfx/build_whoosh.py.
     wind_url = None
     if audio and cfg.sfx_enabled:
-        wind_file = sfx.ensure_whoosh(audio.directory)
-        if wind_file:
-            wind_url = audio.url_for(wind_file)
+        wind_url = audio.wind_url()
+        if wind_url:
             print(f"  wind: {wind_url}")
+        else:
+            print("  wind: whoosh.wav missing -- run sfx/build_whoosh.py (wind off this run)")
 
     avatar = AvatarState(f, cfg, wind_url=wind_url)
 
