@@ -39,9 +39,9 @@ the Realtime API.
 - **Stop any running Furhat AI Creator skill first** — it fights the Realtime-API app
   (both want the robot's voice/listen pipeline). Stop it before launching the demo.
 - **Run on Ethernet.** WiFi was unstable in testing, and the robot must reach this PC
-  over the LAN to fetch the rendered voice and wind-SFX WAVs over HTTP. Two local HTTP
-  ports must be reachable from the robot: **8079** (deep-voice WAVs, `AANG_FX_PORT`) and
-  **8077** (wind SFX, `AANG_SFX_PORT`) — open both if a firewall is in the way.
+  over the LAN to fetch the rendered voice and wind-SFX WAVs over HTTP. One local HTTP
+  port must be reachable from the robot: **8077** (`AANG_SFX_PORT`), which serves **both**
+  the deep voice and the wind — open it if a firewall is in the way.
 
 ## Setup
 
@@ -104,25 +104,20 @@ only optional **manual overrides**:
 | `aang/config.py` | All settings, each overridable by an environment variable. |
 | `face/build_aang_face.py` | Builds the custom face pack `face/Aang.zip` (both faces, baked arrow). |
 | `sfx/build_whoosh.py` | Builds the committed Avatar-State wind `sfx/whoosh.wav` (offline, needs numpy) — run only to retune the sound, then commit it. |
-| `tools/import_aang_face.py` | Installs the face pack on the robot (`deploy` / `select`). |
-| `tools/probe.py` | Lists the robot's installed faces and voices. |
-| `tools/smoke_test.py` | One-shot hardware check of every primitive Aang uses. |
-| `tools/avatar_demo.py` | One-shot Avatar-State showpiece (no mic/conversation) — for filming the transformation. |
-| `tools/face_console.py` | Interactive console to drive the face / LED / head params live (diagnostics + tuning). |
 
 ## How to tweak
 
 Everything is an env var (see `.env.example`) — no code edits needed:
 
-- **Different face/voice?** Run `python tools/probe.py en-US` to list options, then set
-  `AANG_FACE` / `AANG_FACE_AVATAR` / `AANG_VOICE` / `AANG_VOICE_AVATAR`.
+- **Different face/voice?** Set `AANG_FACE` / `AANG_FACE_AVATAR` / `AANG_VOICE` /
+  `AANG_VOICE_AVATAR` to faces/voices already installed on the robot.
 - **Different robot?** Set `FURHAT_HOST`.
 - **Different brain?** `AANG_BRAIN=anthropic` (+ `ANTHROPIC_API_KEY`), or `AANG_MODEL=...`.
 - **Deep Avatar voice on/off?** `AANG_AVATAR_FX=1` (default) renders the deep voice from
   this PC; `AANG_AVATAR_FX=0` uses the robot's native deep voice (`AANG_VOICE_AVATAR`).
   Pick the edge-tts voice with `AANG_FX_VOICE` (default `en-US-ChristopherNeural`). The
-  rendered WAVs are served on `AANG_FX_PORT` (default `8079`, must be LAN-reachable) and
-  written to `AANG_FX_DIR` (default `%TEMP%\aang_fx`).
+  rendered WAVs go in the `sfx/` folder and are served by the shared LAN audio server on
+  `AANG_SFX_PORT` (default `8077`, must be LAN-reachable).
 - **Push-to-talk instead of open mic?** `AANG_PTT=1` enables push-to-talk (hold the
   space key); the default `AANG_PTT=0` is hands-free open mic.
 - **Avatar State too long / too short?** `AANG_AVATAR_TIMEOUT` (seconds; default 25).
@@ -154,10 +149,11 @@ To install it:
 
 ```powershell
 python face/build_aang_face.py             # bake both faces -> face/Aang.zip
-python tools/import_aang_face.py deploy     # /assetpack/deploy -> textures + profiles
-#  >>> RESTART THE ROBOT <<<                 # FaceCore loads asset-pack textures on boot
-python tools/import_aang_face.py select     # face.config -> "adult - Aang4"
 ```
+
+Then deploy `face/Aang.zip` to the robot as an asset pack (`/assetpack/deploy`) and
+**restart the robot** — FaceCore loads asset-pack textures only on boot. On startup the
+app selects `adult - Aang4` for you via `request.face.config`.
 
 > `AANG_CHAR_NAME` (default `Aang4`) sets the character name the pack installs/selects as.
 
@@ -170,7 +166,7 @@ live via the character profile's `tm_skins_c` tint without a restart.
 
 Don't want to bake the face yourself? The ready-to-install face pack (`Aang.zip`) is
 attached to the GitHub [**v1.0** release](https://github.com/rafallex/aang-furhat/releases/tag/v1.0) —
-download it and skip straight to `python tools/import_aang_face.py deploy`.
+download it and skip straight to deploying it to the robot as an asset pack.
 
 ## Stack
 
