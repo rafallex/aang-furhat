@@ -19,9 +19,9 @@ class Config:
     auth_key: str = _env("FURHAT_KEY", None)          # only if your robot requires one
 
     # ---- Look ----
-    # face_id must be one of the robot's installed faces (see tools/probe.py).
+    # face_id must be one of the robot's installed faces.
     # "adult - Aang4" is the everyday face; "adult - Aang4Avatar" is the glowing Avatar-State
-    # variant (build + install both via tools/import_aang_face.py).
+    # variant (build both with face/build_aang_face.py).
     face_id: str = _env("AANG_FACE", "adult - Aang4")
     face_id_avatar: str = _env("AANG_FACE_AVATAR", "adult - Aang4Avatar")
 
