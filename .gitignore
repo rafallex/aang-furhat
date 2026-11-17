@@ -3,9 +3,6 @@
 *.env
 !.env.example
 
-# Claude Code session + memory (private)
-.claude/
-
 # python
 __pycache__/
 *.pyc
@@ -21,9 +18,10 @@ sfx/*
 # The source textures (face/Aang/) and preview ARE committed so the repo is self-contained.
 face/Aang.zip
 
-# editors / IDEs
+# editors / IDEs / local tool settings
 .idea/
 .vscode/
+.claude/
 
 # JVM crash / replay logs
 *.log
